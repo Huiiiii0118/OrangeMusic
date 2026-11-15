@@ -316,6 +316,13 @@ let isQuitting = false
 let closeAsking = false
 // 关闭按钮行为：ask 询问 / tray 最小化到托盘 / quit 直接退出（设置页可改，存在 userData/close-action.json）
 let closeAction = 'ask'
+// 外层壳（NSIS 启动器）路径：壳 Exec 内层时通过 --om-launcher= 传入（带引号所以是完整 argv 项）。
+// 应用内「一键自更新」用它定位并替换壳文件；开发模式 / 直接跑内层时为空，更新退化为手动下载。
+const launcherPath = (() => {
+  const arg = process.argv.find((a) => a.startsWith('--om-launcher='))
+  const p = arg ? arg.slice('--om-launcher='.length).trim().replace(/^"|"$/g, '') : ''
+  return p && fs.existsSync(p) ? p : ''
+})()
 const SELF_TEST = process.argv.includes('--self-test')
 const PROBE = process.argv.includes('--probe')   // 只跑音源实测（快，用来验收能不能真的出声）
 const SELF_TEST_MUTATE = process.argv.includes('--mutate')
@@ -2737,6 +2744,101 @@ ipcMain.handle('smtc:art', async (_e, url) => {
     return { ok: true, dataUrl: `data:${type};base64,${buf.toString('base64')}`, type }
   } catch (err) { return { ok: false, error: err.message } }
 })
+
+// ── 应用内一键自更新（参考 OrangeIsland 的 PortableUpdate 思路，适配 NSIS 单文件壳）──
+// 交付形态是「外层 NSIS 壳 + 内层 Electron」：壳 Exec 内层后立即退出，所以运行中只有内层，
+// 壳文件不被锁定，可以安全替换。链路：壳把自身路径通过 --om-launcher= 传进来 →
+// GitHub 下载新壳到 userData\updates\ 暂存（Range 断点续传 + 重试 + 进度回推）→
+// apply 时启动 PowerShell 助手：等本进程退出 → 备份旧壳(.old) → 换上新壳 → 启动新壳
+// （新壳按新构建号重新解压并清理旧目录；数据在 %APPDATA%\橙子音乐 不受影响）→ 失败回滚。
+const updStageDir = () => path.join(app.getPath('userData'), 'updates')
+const updStagePath = () => path.join(updStageDir(), 'OrangeMusic-update.exe')
+const updResultPath = () => path.join(updStageDir(), 'update-result.txt')
+
+function updPushProgress(received, total) {
+  try { if (win && !win.isDestroyed()) win.webContents.send('upd:progress', { received, total }) } catch { /* 窗口已关 */ }
+}
+
+// 下载（支持断点续传）：逻辑在 upd-core.cjs，与测试脚本共用同一份实现（测的就是跑的）。
+async function updDownload(url, expectedSize) {
+  const { downloadUpdate } = require('./upd-core.cjs')
+  fs.mkdirSync(updStageDir(), { recursive: true })
+  return downloadUpdate(url, expectedSize, updStagePath(), (received, total) => updPushProgress(received, total))
+}
+
+// 上一次更新的结果标记（apply 的助手写的 ok / fail: 原因），内层启动时读给前端提示
+ipcMain.handle('app:updInfo', () => {
+  let staged = null
+  try {
+    const p = updStagePath()
+    if (fs.existsSync(p)) { const st = fs.statSync(p); staged = { size: st.size, mtimeMs: st.mtimeMs } }
+  } catch { /* ignore */ }
+  let result = ''
+  try { if (fs.existsSync(updResultPath())) result = fs.readFileSync(updResultPath(), 'utf8').trim() } catch { /* ignore */ }
+  return { launcher: launcherPath, staged, result }
+})
+
+ipcMain.handle('app:updDownload', async (_e, url, expectedSize) => {
+  if (!url || !/^https:\/\/github\.com\/|https:\/\/api\.github\.com\/|https:\/\/objects\.githubusercontent\.com\//i.test(String(url))) {
+    return { ok: false, error: '下载地址不受支持' }
+  }
+  try { return await updDownload(String(url), Number(expectedSize) || 0) }
+  catch (e) { return { ok: false, error: e.message } }
+})
+
+ipcMain.handle('app:updApply', (_e, expectedSize) => {  try {
+    if (!launcherPath) return { ok: false, error: '本次运行缺少壳路径（旧版包请先手动更新一次）' }
+    const staged = updStagePath()
+    if (!fs.existsSync(staged)) return { ok: false, error: '没有已下载的更新包' }
+    const want = Number(expectedSize) || 0
+    if (want && fs.statSync(staged).size !== want) return { ok: false, error: '更新包不完整，请重新下载' }
+    fs.mkdirSync(updStageDir(), { recursive: true })
+    const { buildHelperCommand } = require('./upd-core.cjs')
+    const { file, args } = buildHelperCommand({
+      launcherPath,
+      stagedPath: staged,
+      resultPath: updResultPath(),
+      pid: process.pid,
+    })
+    const child = require('node:child_process').spawn(file, args,
+      { detached: true, stdio: 'ignore', windowsHide: true })
+    child.unref()
+    // 给助手进程一点启动时间，然后退出；助手等本进程退出后完成替换
+    setTimeout(() => { isQuitting = true; try { app.quit() } catch { process.exit(0) } }, 400)
+    return { ok: true }
+  } catch (e) { return { ok: false, error: e.message } }
+})
+
+// 更新落地收尾（新内层首次启动时由前端调用一次）：删掉替换助手留下的回滚备份
+// 和壳目录里更旧的带版本号 exe（保守模式：只匹配 OrangeMusic-<版本>-*.exe 且版本低于当前，
+// 匹配不上的文件一律不动），并清掉已消费的更新结果标记。
+ipcMain.handle('app:updCleanup', () => {
+  const deleted = []
+  const tryDel = (p) => { try { fs.unlinkSync(p); deleted.push(path.basename(p)) } catch { /* 锁定就留着下次清 */ } }
+  try {
+    if (!launcherPath) return { ok: false, deleted }
+    const dir = path.dirname(launcherPath)
+    // 1) 回滚备份：<壳名>.old
+    const bak = launcherPath + '.old'
+    if (fs.existsSync(bak)) tryDel(bak)
+    // 2) 更旧的带版本号 exe（如 OrangeMusic-1.0.0.exe）
+    const cur = parseAppVersion(app.getVersion())
+    for (const f of fs.readdirSync(dir)) {
+      const m = /^OrangeMusic-([0-9.]+)(-\w+)?\.exe$/i.exec(f)
+      if (!m) continue
+      if (parseAppVersion(m[1]) < cur) tryDel(path.join(dir, f))
+    }
+    // 3) 已消费的结果标记
+    tryDel(updResultPath())
+  } catch { /* 目录扫描失败不影响运行 */ }
+  return { ok: true, deleted }
+})
+
+// "1.0.1" -> [1,0,1]，逐段比较用
+function parseAppVersion(v) {
+  return String(v || '').replace(/^v/i, '').split(/[.+-]/).slice(0, 3).map((x) => Number(String(x).replace(/\D/g, '')) || 0)
+    .reduce((a, n, i) => a + n * Math.pow(1000, 2 - i), 0)
+}
 
 logLine('[boot] ready, packaged=' + app.isPackaged)
 if (!app.requestSingleInstanceLock()) {

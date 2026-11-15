@@ -246,6 +246,12 @@ async function boot() {
   try {
     S.core = await loadCore()
     S.cloud = true
+    // 上次「一键更新」的结果（替换助手写的标记）：ok 提一句，失败给出原因
+    try {
+      const info = await window.orangeUpdater?.info?.()
+      if (info?.result) toast(info.result === 'ok' ? '更新已成功安装' : `上次更新失败：${info.result}`)
+      if (info?.staged) S.upd = { phase: 'staged', total: info.staged.size }
+    } catch { /* 无更新通道（旧包 / 开发模式） */ }
     // 封面角标清洗：核心就绪后才挂委托（首屏图此时已加载，主动补扫一遍）
     if (S.core.coverClean) {
       document.addEventListener('load', onCoverLoaded, true)
@@ -330,12 +336,23 @@ async function boot() {
   }
   // 首次启动 / 清缓存后：空闲逐项预热全站页面数据，用户点进去时直接读缓存，不出现「加载中」
   setTimeout(() => { try { warmAllPages() } catch { /* noop */ } }, 4000)
-  // 版本升级检测：与上次运行版本不同（且非首次启动）时，弹出「本次更新内容」
+  // 首次启动 / 清缓存后：空闲逐项预热全站页面数据，用户点进去时直接读缓存，不出现「加载中」
+  setTimeout(() => { try { warmAllPages() } catch { /* noop */ } }, 4000)
+  // 「更新内容」弹窗策略（用户定稿）：**仅在更新落地后的第一次启动**弹一次，之后打开不再弹。
+  // 触发条件（满足其一）：① 替换助手留下的 result=ok 标记（一键更新的本次启动）；
+  // ② 上次运行版本号与本机不同（手动覆盖 exe 的升级）。弹完后消费标记，普通启动零动作。
   try {
     const cv = S.core.updater.CURRENT_VERSION
     const lv = localStorage.getItem('orangemusic:lastVersion') || ''
-    if (lv && lv !== cv) {
+    let info = null
+    try { info = await window.orangeUpdater?.info?.() } catch { /* 旧包 / 开发模式 */ }
+    const justUpdated = info?.result === 'ok' || (!!lv && lv !== cv)
+    if (justUpdated) {
       setTimeout(() => { try { openChangelog({ whatsNew: true, title: `本次更新内容（v${cv}）` }) } catch { /* noop */ } }, 1400)
+      // 更新收尾：删掉壳旁的 .old 回滚备份与更旧的带版本号 exe（仅本目录、保守匹配），清理已消费的标记
+      try { await window.orangeUpdater?.cleanup?.() } catch { /* ignore */ }
+    } else if (info?.result && info.result !== 'ok') {
+      toast(`上次更新失败：${info.result}`)
     }
     localStorage.setItem('orangemusic:lastVersion', cv)
   } catch { /* 隐私模式 */ }
@@ -3963,15 +3980,30 @@ const updateResultHtml = (u) => {
       : `${esc(u.repo)} · 当前已是最新${u.publishedAt ? ` · ${esc(String(u.publishedAt).slice(0, 10))}` : ''}`
     return `<div class="set-row"><div><b>${title}</b><small>${detail}</small></div><span class="pill accent">${esc(u.current)}</span></div>`
   }
+  // 应用内一键自更新（参考 OrangeIsland）：主进程下载到暂存 → 助手等进程退出后替换壳文件并重启。
+  // 只有「新壳包」才会把壳路径传进来（--om-launcher=），旧包升级一次后才有此能力。
+  const canAuto = !!(typeof window !== 'undefined' && window.orangeUpdater)
+  const ph = S.upd?.phase || 'idle'
+  const mb = (n) => `${(Number(n || 0) / 1048576).toFixed(1)} MB`
+  const updBtns = canAuto && ph !== 'idle'
+    ? ph === 'downloading'
+      ? `<div class="upd-bar"><i id="updBarFill"></i></div><small class="upd-bar-txt" id="updBarTxt">${mb(S.upd.received)} / ${mb(S.upd.total || u.asset?.size)}</small>`
+      : ph === 'staged'
+        ? `<div class="btn-row"><button class="btn small primary" id="setUpdApply">重启并安装</button><a class="btn small" href="${esc(u.pageUrl)}" target="_blank" rel="noopener">打开发布页</a></div><p class="upd-hint">更新包已就绪，点「重启并安装」自动完成替换并重启（失败会自动回滚旧版本）。</p>`
+        : `<p class="upd-hint">正在退出应用并安装更新…</p>`
+    : `<div class="btn-row">
+      ${canAuto && u.asset ? `<button class="btn small primary" id="setUpdDl">一键下载并更新${sz ? ` · ${sz}` : ''}</button>` : ''}
+      ${u.asset ? `<a class="btn small" href="${esc(u.asset.url)}" target="_blank" rel="noopener">获取 ${esc(u.asset.name)}</a>` : ''}
+      <a class="btn small" href="${esc(u.pageUrl)}" target="_blank" rel="noopener">打开发布页</a>
+    </div>
+    ${canAuto
+      ? `<p class="upd-hint">一键更新：下载完成后点「重启并安装」，应用会自动替换并重启；收藏 / 歌单 / 播放记录在 %APPDATA%\\橙子音乐，不受影响。</p>`
+      : `<p class="upd-hint">获取后退出应用，用新 exe 覆盖原文件即可。收藏 / 歌单 / 播放记录在 %APPDATA%\\橙子音乐，不受影响。</p>`}`
   return `<div class="upd-card">
     <div class="upd-head"><b>发现新版本 ${esc(u.latest)}</b><span class="pill accent">当前 ${esc(u.current)}</span></div>
     ${u.name ? `<p class="upd-name">${esc(u.name)}</p>` : ''}
     ${u.notes ? `<pre class="upd-notes">${esc(u.notes)}</pre>` : ''}
-    <div class="btn-row">
-      ${u.asset ? `<a class="btn small primary" href="${esc(u.asset.url)}" target="_blank" rel="noopener">获取 ${esc(u.asset.name)}${sz ? ` · ${sz}` : ''}</a>` : ''}
-      <a class="btn small" href="${esc(u.pageUrl)}" target="_blank" rel="noopener">打开发布页</a>
-    </div>
-    <p class="upd-hint">获取后退出应用，用新 exe 覆盖原文件即可。收藏 / 歌单 / 播放记录在 %APPDATA%\\橙子音乐，不受影响。</p>
+    ${updBtns}
   </div>`
 }
 
@@ -4124,7 +4156,14 @@ async function openChangelog(opts = {}) {
     const r = await S.core.updater.recentReleases(limit, { force: true })
     if (!r.ok) { body.innerHTML = `<div class="om-cl-empty">获取更新记录失败：${esc(String(r.error || ''))}</div>`; return }
     if (!r.releases || !r.releases.length) { body.innerHTML = `<div class="om-cl-empty">暂无已发布的版本记录</div>`; return }
-    body.innerHTML = r.releases.map((rel) => `
+    // whatsNew（更新落地后的首次启动）：优先显示**当前版本**的说明；仓库里没有当前版本
+    // （本地是未发布测试版）才回退到最新一条。
+    let list = r.releases
+    if (opts.whatsNew) {
+      const hit = list.find((x) => String(x.version || '') === String(APP_VERSION))
+      list = hit ? [hit] : [list[0]]
+    }
+    body.innerHTML = list.map((rel) => `
       <div class="om-cl-item">
         <div class="om-cl-meta"><span class="om-cl-ver">v${esc(String(rel.version || ''))}</span>${rel.date ? `<span class="om-cl-date">${esc(String(rel.date))}</span>` : ''}</div>
         <div class="om-cl-notes">${rel.notes ? esc(String(rel.notes)).replace(/\n/g, '<br>') : '（无说明）'}</div>
@@ -4292,6 +4331,50 @@ async function runUpdateCheck(manual = false) {
     S.updateBusy = false
     if (S.section === 'settings' && !S.page) render()
   }
+}
+
+// 一键自更新：主进程流式下载到暂存（进度回推），完成后用户点「重启并安装」交给助手替换壳文件。
+async function runUpdDownload() {
+  const u = S.update
+  if (!u?.ok || !u.hasUpdate || !u.asset?.url) return toast('请先检查更新')
+  if (!window.orangeUpdater) return toast('当前环境不支持应用内更新')
+  S.upd = { phase: 'downloading', received: 0, total: u.asset.size || 0 }
+  if (S.section === 'settings' && !S.page) render()
+  window.orangeUpdater.onProgress(({ received, total }) => {
+    if (S.upd?.phase !== 'downloading') return
+    S.upd.received = received
+    if (total) S.upd.total = total
+    // CSP 禁行内样式，进度条走 CSSOM 更新，不整页重渲染
+    const pct = S.upd.total ? Math.min(100, Math.round(received * 100 / S.upd.total)) : 0
+    const fill = document.querySelector('#updBarFill')
+    if (fill) fill.style.width = `${pct}%`
+    const txt = document.querySelector('#updBarTxt')
+    if (txt) txt.textContent = `${pct}% · ${(received / 1048576).toFixed(1)} / ${((S.upd.total || 0) / 1048576).toFixed(1)} MB`
+  })
+  const r = await window.orangeUpdater.download(u.asset.url, u.asset.size)
+  if (!r?.ok) {
+    S.upd = { phase: 'idle', error: r?.error || '下载失败' }
+    toast(`下载失败：${r?.error || '未知错误'}`)
+    if (S.section === 'settings' && !S.page) render()
+    return
+  }
+  S.upd = { phase: 'staged', total: r.size || u.asset.size }
+  toast('更新包已就绪')
+  if (S.section === 'settings' && !S.page) render()
+}
+
+async function runUpdApply() {
+  if (!window.orangeUpdater) return
+  const size = Number(S.upd?.total || S.update?.asset?.size || 0)
+  S.upd = { phase: 'applying' }
+  if (S.section === 'settings' && !S.page) render()
+  const r = await window.orangeUpdater.apply(size)
+  if (!r?.ok) {
+    S.upd = { phase: 'staged', error: r?.error || '无法启动更新' }
+    toast(`更新失败：${r?.error || '未知错误'}`)
+    if (S.section === 'settings' && !S.page) render()
+  }
+  // 成功时应用会自动退出，交给主进程与替换助手
 }
 
 async function clearData(kind) {
@@ -4811,6 +4894,8 @@ function bindView() {
     openIosGuide()
   })
   $('#setUpdateCheck') && ($('#setUpdateCheck').onclick = () => runUpdateCheck(true))
+  $('#setUpdDl') && ($('#setUpdDl').onclick = () => runUpdDownload())
+  $('#setUpdApply') && ($('#setUpdApply').onclick = () => runUpdApply())
   $('#setChangelog') && ($('#setChangelog').onclick = () => openChangelog())
   $('#setAutoUpdate') && ($('#setAutoUpdate').onchange = (e) => {
     S.core?.updater?.saveCfg({ auto: e.target.checked })

@@ -63,8 +63,9 @@ Section
   WriteRegStr HKCU "Software\Classes\AppUserModelId\OrangeMusic.Desktop.Player" "IconUri" "$APPDIR\橙子音乐.exe"
 
   ; ── 已经解压过（含升级后版本号相同的重复启动）：直接拉起，毫秒级 ──
+  ; --om-launcher= 把外层壳自身路径传给内层：应用内「一键更新」要用它替换壳文件（参考 OrangeIsland）
   IfFileExists "$APPDIR\橙子音乐.exe" 0 firstRun
-    Exec '"$APPDIR\橙子音乐.exe"'
+    Exec '"$APPDIR\橙子音乐.exe" --om-launcher="$EXEDIR\$EXEFILE"'
     Quit
   firstRun:
 
@@ -85,7 +86,7 @@ Section
   ; 如果目录没建起来（磁盘满 / 被杀软锁住），退回到直接提示
   IfFileExists "$APPDIR\橙子音乐.exe" 0 failed
 
-  Exec '"$APPDIR\橙子音乐.exe"'
+  Exec '"$APPDIR\橙子音乐.exe" --om-launcher="$EXEDIR\$EXEFILE"'
   Quit
 
   failed:

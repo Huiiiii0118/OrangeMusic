@@ -43,3 +43,12 @@ contextBridge.exposeInMainWorld('orangeWindow', {
   // SMTC 封面：主进程取回跨域封面原始字节，返回 dataURL（file:// 会被系统媒体面板丢弃）
   smtcArt: (url) => ipcRenderer.invoke('smtc:art', url),
 })
+
+// 应用内一键自更新：下载暂存 / 进度 / 重启安装（主进程核对，见 main.cjs 的 app:upd* 通道）
+contextBridge.exposeInMainWorld('orangeUpdater', {
+  info: () => ipcRenderer.invoke('app:updInfo'),
+  download: (url, size) => ipcRenderer.invoke('app:updDownload', String(url || ''), Number(size) || 0),
+  apply: (size) => ipcRenderer.invoke('app:updApply', Number(size) || 0),
+  cleanup: () => ipcRenderer.invoke('app:updCleanup'),
+  onProgress: (cb) => ipcRenderer.on('upd:progress', (_e, p) => { try { cb(p) } catch { /* ignore */ } }),
+})

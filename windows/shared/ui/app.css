@@ -607,6 +607,12 @@ a.btn { display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; line-height: 1.7; color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
   font-family: inherit; }
 .upd-hint { margin: 8px 0 0; font-size: 11px; color: var(--ink-3); line-height: 1.65; }
+/* 一键更新下载进度条（宽度由 CSSOM 更新，CSP 禁行内样式） */
+.upd-bar { height: 8px; margin: 10px 0 6px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--line); overflow: hidden; }
+.upd-bar i { display: block; width: 0; height: 100%; border-radius: 999px;
+  background: var(--brand, #0a84ff); transition: width .25s ease; }
+.upd-bar-txt { display: block; font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
 .set-row .upd-repo { flex: 1 1 260px; justify-content: flex-end; }
 .set-row .upd-repo .field { max-width: 220px; }
 /* 更新源锁定（项目主页不可修改）：灰显禁用的输入框与按钮 */
