@@ -19,6 +19,9 @@
   --gold: #e6bd7d;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  /* 页头基准高度：以「听你想听」页头像圈顶部为准（safe-t + 20px）。
+     fixed 页面用 calc(var(--safe-t) + 20px)；流内页面因 .window 已含 safe-t，直接用 20px。 */
+  --ios-head-top: 20px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -129,6 +132,9 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 0 14px;
 }
+/* 流内页面的页头（我的 / 我的音乐子页）对齐「听你想听」基准；
+   听你想听自身在抽屉里（.ios-drawer，非 .ios-page），不受影响。 */
+.ios-page > .ios-head { padding-top: var(--ios-head-top); }
 .ios-head h1 {
   margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -1.1px; color: var(--ink);
 }
@@ -352,7 +358,7 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: none;
   align-content: stretch;
-  padding: calc(4px + var(--safe-t)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  padding: calc(var(--safe-t) + var(--ios-head-top)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
@@ -648,7 +654,9 @@ body {
 
 /* ── iOS 设置页：适配手机宽度 + 深色控件 ─────── */
 .ios-setpage {
-  padding: calc(var(--safe-t) + 6px) 18px calc(var(--dock-h) + 44px + var(--safe-b));
+  /* 顶部间距交给 .ios-mtabs（--ios-head-top 基准）；这里不再自带 safe-t，
+     否则会和 .window 的 safe-t 叠成双份（刘海机上顶部空白翻倍）。 */
+  padding: 0 18px calc(var(--dock-h) + 44px + var(--safe-b));
 }
 .ios-setpage .ios-head { padding: 4px 0 10px; }
 .ios-setpage .ios-head h1 { font-size: 26px; }
@@ -703,7 +711,8 @@ body {
 /* ── Music 页顶部 tabs ───────────────────── */
 .ios-mtabs {
   display: flex; align-items: center; gap: 16px;
-  padding: 8px 0 14px;
+  /* 顶部基准与「听你想听」页头像圈对齐（原 8px 太贴状态栏） */
+  padding: var(--ios-head-top) 0 14px;
 }
 .ios-mback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
@@ -793,7 +802,7 @@ body {
 .ios-lib-empty .btn { margin-top: 6px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: var(--brand); color: #fff; }
 
 /* ── 搜索页 ─────────────────────────────── */
-.ios-search-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; }
+.ios-search-head { display: flex; align-items: center; gap: 10px; padding: var(--ios-head-top) 0 12px; }
 .ios-sback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
   background: transparent; color: var(--ink-2); font-size: 20px; line-height: 1; padding: 0 0 4px;
@@ -855,7 +864,7 @@ body {
 .ios-lyrics-page {
   position: fixed; inset: 0; z-index: 210;
   display: flex; flex-direction: column;
-  padding: calc(var(--safe-t) + 8px) var(--pad) calc(14px + var(--safe-b));
+  padding: calc(var(--safe-t) + var(--ios-head-top)) var(--pad) calc(14px + var(--safe-b));
   background: linear-gradient(180deg, #16233a 0%, #0f1116 62%, #0b0c10 100%);
   transform: translateY(12px); opacity: 0; pointer-events: none;
   transition: transform .22s ease, opacity .22s ease;

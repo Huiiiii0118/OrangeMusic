@@ -146,33 +146,9 @@ export async function checkSilently() {
   return r?.ok && r.hasUpdate ? r : null
 }
 
-// 最近 N 个正式版（用于「更新内容」查看）：跳过草稿 / 预发布，按发布时间倒序。
-export async function recentReleases(n = 3, { force = false } = {}) {
-  const cfg = readCfg()
-  const target = String(cfg.repo || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\/+$/, '')
-  if (!/^[\w.-]+\/[\w.-]+$/.test(target)) {
-    return { ok: false, error: '仓库地址格式不对，应为 owner/repo', releases: [] }
-  }
-  const cacheKey = `recent:${target}:${n}`
-  const cache = cfg[cacheKey]
-  if (!force && cache && Date.now() - (cache.at || 0) < CACHE_MS) return cache.data
-  try {
-    const list = await ghJson(`https://api.github.com/repos/${target}/releases?per_page=${Math.max(n, 6)}`)
-    const rels = Array.isArray(list) ? list : []
-    const official = rels.filter((r) => !r.draft && !r.prerelease)
-    const picked = (official.length ? official : rels).slice(0, n).map((r) => ({
-      version: String(r.tag_name || r.name || '').replace(/^v/i, ''),
-      title: r.name || r.tag_name || '',
-      notes: String(r.body || '').trim(),
-      date: (r.published_at || '').slice(0, 10),
-      url: r.html_url || `https://github.com/${target}/releases`,
-    }))
-    const data = { ok: true, releases: picked }
-    saveCfg({ [cacheKey]: { at: Date.now(), data } })
-    return data
-  } catch (e) {
-    return { ok: false, error: e.message, releases: [] }
-  }
-}
+// iOS 端不再从 GitHub 读取更新说明 / 版本列表（旧 recentReleases 已删除）：
+// 「关于 → 更新内容」与版本升级弹窗统一读随站点发布的 release-notes.json
+// （由 ios/RELEASE_NOTES/*.md 构建，按版本倒序、只保留最近 3 版），
+// 与 GitHub Releases（只描述 Windows 端）彻底解耦。
 
 export const sizeText = (n) => (!n ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)

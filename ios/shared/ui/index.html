@@ -403,6 +403,8 @@
     </div>
     <span class="auth-tip" id="sendTip"></span>
     <button class="btn primary btn-block auth-submit" id="submitCodeBtn">登录 / 自动注册</button>
+    <!-- 仅本地测试环境显示（app.js 按 hostname 判定后取消 hidden）：一键进入本地测试会话 -->
+    <button class="btn btn-block auth-test" id="testLoginBtn" hidden>一键登录本地测试账号</button>
     <div class="error" id="loginErr"></div>
     <p class="auth-foot">验证码登录即自动注册，无需密码；同一邮箱 / 手机号在 iOS 与 Windows 共用一个账号。</p>
     <button class="auth-logout" id="logoutBtn" hidden>退出当前登录</button>

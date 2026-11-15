@@ -152,13 +152,19 @@ async function kwSearch(q, limit = 20) {
   const list = j?.abslist || []
   return list.map((s) => {
     const rid = String(s.MUSICRID || '').replace(/^MUSIC_/, '')
+    // 酷我搜索自带专辑封面字段（web_albumpic_short / albumpic），直接填上：
+    // IMG 标签不受 CORS 限制，前端立即可显示，不必再走解析链。
+    // 注意字段常是相对路径（120/s4s16/…），要拼 img4.kuwo.cn 前缀。
+    let alb = String(s.web_albumpic_short || s.albumpic || '').trim()
+    if (alb && !/^https?:\/\//i.test(alb)) alb = 'https://img4.kuwo.cn/star/albumcover/' + alb.replace(/^\/+/, '')
+    alb = alb ? alb.replace(/^http:/i, 'https:') : ''
     return {
       source: 'kw',
       id: rid,
       title: String(s.SONGNAME || '').replace(/&nbsp;/g, ' ').replace(/\\u0026/g, '&').trim(),
       artist: String(s.ARTIST || '').replace(/\\u0026/g, '&').trim(),
       album: String(s.ALBUM || '').trim(),
-      cover: '',
+      cover: alb,
       durationMs: Number(s.DURATION || 0) * 1000,
     }
   }).filter((x) => x.title && x.id)
@@ -778,7 +784,40 @@ async function resolveCover(title, artist, album) {
       url = filled[0]?.cover || ''
     }
   }
+  // 第三/四档：GD 搜歌换图（网易云 → 酷我）。本机网易云被风控时这条是主力兜底。
+  if (!url) url = await gdSearchPic(title, artist, 'netease').catch(() => '')
+  if (!url) url = await gdSearchPic(title, artist, 'kuwo').catch(() => '')
   return cset(ck, url || '', url ? 6 * 60 * 60 * 1000 : 60 * 1000)
+}
+
+// GD 兜底（服务端代发，无 CORS 问题）：本机网易云可能被风控（200 但 code=405 空结果），
+// GD 的搜歌 + 换图是独立通道，不受影响 —— 本地测试与云端共用同一兜底链。
+const GD_BASE = 'https://music-api.gdstudio.xyz/api.php'
+const isImgUrl = (u) => /^https?:\/\/[^\s"'<>]+\.(jpg|jpeg|png|webp)(\?|$)/i.test(String(u || ''))
+async function gdPic(picId, source = 'netease') {
+  if (!picId) return ''
+  try {
+    const r = await req(`${GD_BASE}?types=pic&source=${source}&id=${encodeURIComponent(picId)}&size=200`, { timeout: 7000 })
+    const j = await r.json()
+    const u = String(j?.url || '')
+    return isImgUrl(u) ? u.replace(/^http:/i, 'https:') : ''
+  } catch { return '' }
+}
+async function gdSearchPic(title, artist, source = 'netease') {
+  const q = `${title || ''} ${artist || ''}`.trim()
+  if (!q || !title) return ''
+  try {
+    const r = await req(`${GD_BASE}?types=search&source=${source}&name=${encodeURIComponent(q)}&count=5&pages=1`, { timeout: 8000 })
+    const j = await r.json()
+    const rows = Array.isArray(j) ? j : []
+    const t = norm(title)
+    // 必须歌名对得上才用它的封面：宁可不给也不配成同名别的歌。
+    const hit = rows.find((x) => {
+      const n = norm(x?.name)
+      return n && (n.includes(t) || t.includes(n)) && x?.pic_id
+    })
+    return hit ? await gdPic(hit.pic_id, source) : ''
+  } catch { return '' }
 }
 
 // ── 通用代理：浏览器直连会被 CORS 拦的平台接口，统一从服务端转发 ──

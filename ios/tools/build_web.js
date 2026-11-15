@@ -64,6 +64,37 @@ export function buildSite({ out, platform = 'ios' }) {
   // 只带 server.js（零依赖：node:http + 全局 fetch）；内置引擎缺失时会自动降级到
   // 酷我/网易云双源取链。若只发静态文件，/api/* 全部 404 → 推荐/封面/歌单
   // 永远停在「正在取…」。必须 add 进 written，否则下面清理旧文件时会被删掉。
+  // iOS 端「关于 → 更新内容」读取本地更新说明：把 RELEASE_NOTES/*.md 聚合成
+  // release-notes.json 随站点发布。GitHub Releases 现在只写 Windows 端，
+  // iOS 的更新说明走这条本地链路，二者彻底解耦。
+  if (platform === 'ios') {
+    const notesDir = path.join(ROOT, 'RELEASE_NOTES')
+    const verNum = (v) => String(v).split(/[.-]/).map((n) => parseInt(n, 10) || 0)
+    const cmpVer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d } return 0 }
+    const releases = []
+    if (fs.existsSync(notesDir)) {
+      for (const f of fs.readdirSync(notesDir)) {
+        if (!/\.md$/i.test(f)) continue
+        const raw = fs.readFileSync(path.join(notesDir, f), 'utf8')
+        const version = f.replace(/\.md$/i, '').replace(/^v/i, '')
+        const dm = raw.match(/(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})/)
+        const date = dm ? `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}` : ''
+        // 去掉首行标题，轻量把 markdown 小标题转成【】，列表符号保留，前端按纯文本渲染。
+        const notes = raw.split(/\r?\n/).slice(1).join('\n')
+          .replace(/^#{2,4}\s+(.+)$/gm, '【$1】')
+          .replace(/^#\s+(.+)$/gm, '$1')
+          .trim()
+        releases.push({ version, date, notes })
+      }
+      releases.sort((a, b) => cmpVer(b.version, a.version))
+    }
+    // 云端只保留最近 3 次更新的更新说明（新版本在前，多出的旧版本不进产物）。
+    // RELEASE_NOTES 目录里的历史文件继续留档，不会丢失。
+    const keep = releases.slice(0, 3)
+    fs.writeFileSync(path.join(target, 'release-notes.json'), JSON.stringify({ releases: keep }, null, 2) + '\n')
+    written.add('release-notes.json')
+  }
+
   if (platform === 'ios') {
     const srv = path.join(ROOT, 'server.js')
     if (fs.existsSync(srv)) {

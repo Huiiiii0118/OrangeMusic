@@ -10,6 +10,9 @@ const $ = (s) => document.querySelector(s)
 // 本次重构（QQ 音乐风格）只作用于 Windows 桌面端；iOS 网页版保持原 orange 主题，互不污染。
 const IS_WIN = document.documentElement.dataset.platform === 'windows'
 const IS_IOS = document.documentElement.dataset.platform === 'ios'
+// 本地测试环境：页面从 localhost / 内网 IP 打开（本地 node server.js）才算。
+// 线上站点是公网域名，永不命中 —— 「本地测试账号」一键登录只在这个开关下可用。
+const IS_LOCAL_TEST = /^(localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/i.test(location.hostname)
 // 顶栏前进 / 后退历史栈（仅 Windows 顶栏按钮使用）
 let _hist = []
 let _fwd = []
@@ -189,6 +192,10 @@ const S = {
   // 删除墓碑（跨端删除同步）：{ fav:{key:ts}, recent:{}, trial:{} }
   tombs: readTombs(),
   update: null, updateBusy: false,
+  // 本地测试账号会话（仅 IS_LOCAL_TEST 环境自动登录）
+  localTest: false,
+  // iOS 设置页的两个卡片：'settings' | 'about'
+  iosSetTab: 'settings',
   // 当前曲目歌词：切歌后异步补齐，lines 用于逐行同步高亮
   lyrics: { key: '', forKey: '', lines: [], text: '', ok: false, loading: false },
 }
@@ -234,6 +241,19 @@ async function boot() {
   bindHomeHero()
   bindCogMenu()
   lockScrollBounds()
+  // 本地测试账号：登录面板的一键入口（仅 localhost / 内网 IP 显示，线上永不显示）。
+  // 退出登录会记 orangemusic:testLoggedOut 标记，点这里清除标记并刷新 → boot 自动登录。
+  if (IS_LOCAL_TEST) {
+    const tb = $('#testLoginBtn')
+    if (tb) {
+      tb.hidden = false
+      tb.onclick = () => {
+        try { localStorage.removeItem('orangemusic:testLoggedOut') } catch { /* ignore */ }
+        toast('已启用本地测试账号，正在刷新…')
+        setTimeout(() => location.reload(), 350)
+      }
+    }
+  }
   $('#syncPill').textContent = '初始化中…'
   await render()                 // 先出首屏：绝不因云 SDK / 网络阻塞而白屏
   startPositionSync()
@@ -252,11 +272,21 @@ async function boot() {
     if (S.core.auth.keepLoginEnabled?.() === false) {
       try { await S.core.auth.dropSessionKeepProfile() } catch { /* 离线也不阻塞启动 */ }
     }
-    S.session = await S.core.auth.restoreAuth()
+    // 本地测试账号：仅当页面从 localhost / 内网 IP 打开（本地 node server.js 测试环境）才生效，
+    // 线上站点（quiet-music.app.workbuddy.host）永不命中。跳过云端验证码登录，
+    // 直接以「本地测试」会话进入；数据只写本机（localStorage），不打任何云端 auth/repo 请求。
+    // 退出登录会写入 orangemusic:testLoggedOut，此后不再自动登录，可从登录面板一键重新启用。
+    const testAutoLogin = IS_LOCAL_TEST && !localStorage.getItem('orangemusic:testLoggedOut')
+    if (testAutoLogin) {
+      S.session = { user: { id: 'local-test', name: '本地测试', email: 'test@local.dev' } }
+      S.localTest = true
+    } else {
+      S.session = await S.core.auth.restoreAuth()
+    }
     // 身份统一从落盘档案取（auth.js 的 session() 已双向合并），并**每次启动都**再拉一次云端
     // 资料补齐手机号/昵称：以前只在 user 全空时才拉，SDK 只给 email 就永远补不到手机号，
     // 于是「邮箱和手机号已互绑」却一直显示「手机号未绑定」。
-    if (S.session) {
+    if (S.session && !S.localTest) {
       try {
         const ident = await S.core.auth.refreshIdentity()
         S.identity = ident || S.core.auth.loadIdentity() || {}
@@ -269,7 +299,8 @@ async function boot() {
     }
     // 匿名会话（uid='anon'）同样按未登录处理：否则会写进公共的 anon 桶，多台机器互相覆盖
     S.anonSession = isAnonSession(S.session)
-    S.core.cloud.setLocalOnly(!S.session || S.anonSession) // 未登录 → 所有数据只写本机
+    // 本地测试账号强制只写本机：没有真实云端会话，写云端既无意义也可能污染数据
+    S.core.cloud.setLocalOnly(!S.session || S.anonSession || !!S.localTest)
   } catch (e) {
     S.cloud = false
     toast(`核心加载失败：${e.message}`)
@@ -302,8 +333,9 @@ async function boot() {
       if (document.hidden) return          // 最小化 / 隐藏时不抢带宽，等下次空闲
       startRadioAutoRefresh()
       startPlazaAutoRefresh()
-      // 在线更新：空闲时静默检查一次，只在新版本时提示（可在设置里关掉）
-      S.core.updater.checkSilently()
+      // 在线更新：仅桌面端静默查 GitHub Release（iOS 的更新说明与版本走本地
+      // release-notes.json，随站点发布，不再请求 GitHub）。
+      if (!IS_IOS) S.core.updater.checkSilently()
         .then((r) => { if (r) { S.update = r; toast(`发现新版本 ${r.latest}，可在「设置 → 更新」中获取`) } })
         .catch(() => {})
     })
@@ -316,12 +348,12 @@ async function boot() {
     const lv = localStorage.getItem('orangemusic:lastVersion') || ''
     if (lv && lv !== cv) {
       // 只有确实存在「可展示的版本记录」时才弹「本次更新内容」；
-      // 取不到（例如 GitHub 还没发布 Release）就静默跳过 —— 否则会有一个
-      // z-index 9999 的全屏弹窗先转 9 秒再报错、并且一直挡住整个界面（表现为「哪都点不动」）。
+      // 取不到就静默跳过 —— 否则会有一个 z-index 9999 的全屏弹窗先转 9 秒再报错、
+      // 并且一直挡住整个界面（表现为「哪都点不动」）。iOS 端说明读本地 release-notes.json。
       setTimeout(async () => {
         try {
-          const r = await S.core.updater.recentReleases(1, { force: true })
-          if (r && r.ok && r.releases && r.releases.length) {
+          const releases = await loadReleaseNotes()
+          if (releases && releases.length) {
             openChangelog({ whatsNew: true, title: `本次更新内容（v${cv}）` })
           }
         } catch { /* noop */ }
@@ -2735,7 +2767,8 @@ function iosMineHtml() {
   // 账号信息与 Windows 端同源：都来自云端 auth 的 identity / session，
   // 登录同一账号即自动同步 喜欢 / 歌单 / 播放记录。
   // 账号掩码已按需求移除：Mine 身份卡只显示昵称 + 同步状态
-  const syncState = (S.session && !S.anonSession) ? (S.cloud ? '已登录 · 云端同步' : '已登录 · 等待同步') : (S.anonSession ? '匿名会话 · 点这里重新登录' : '未登录 · 点这里登录')
+  const syncState = S.localTest ? '已登录 · 本地测试（数据仅存本机）'
+    : (S.session && !S.anonSession) ? (S.cloud ? '已登录 · 云端同步' : '已登录 · 等待同步') : (S.anonSession ? '匿名会话 · 点这里重新登录' : '未登录 · 点这里登录')
   const ent = (label, list, count) => `<button class="ios-ent" data-ios-lib="${label}">
       <span class="ios-ent-cover">${list?.[0] ? coverHtml(list[0]) : '<span class="ios-ent-ph">♪</span>'}</span>
       <span class="ios-ent-row"><b>${label.replace('播放', '')} ${count}</b>${IOS_IC.playCircle}</span>
@@ -3185,7 +3218,7 @@ function iosGoto(tab, keepLib = false) {
   if (!keepLib) S.iosLib = ''
   if (tab === 'mine') S.section = 'library'
   else if (tab === 'search') S.section = 'search'
-  else if (tab === 'settings') S.section = 'settings'
+  else if (tab === 'settings') { S.section = 'settings'; S.iosSetTab = 'settings' }
   render()
   iosRenderNav()
 }
@@ -3289,6 +3322,9 @@ document.addEventListener('click', (e) => {
   // Music / 乐库 页
   const mtab = q('[data-ios-mtab]')
   if (mtab) { iosOpenMusic(mtab.dataset.iosMtab); return }
+  // 设置页「设置 / 关于」两个卡片切换
+  const setTab = q('[data-ios-settab]')
+  if (setTab) { S.iosSetTab = setTab.dataset.iosSettab; render(); return }
   if (q('[data-ios-search]')) { iosCloseLyrics(); iosGoto('search'); return }
   const mplay = q('[data-ios-mplay]')
   if (mplay) {
@@ -4877,7 +4913,10 @@ function settingsHtml() {
   S.batchTracks = []
   const s = S.settings
   const upCfg = S.core?.updater?.readCfg?.() || { repo: '', auto: true }
-  const body = `
+  // iOS 端把这一页拆成「设置 / 关于」两个卡片（参照 Music / 乐库 的顶部 tab），
+  // 因此把内容分成 settingsBody（播放 / 音源 / 存储）与 aboutBody（版本 / 更新 / 声明）。
+  // Windows 端仍把两段拼回同一页，外观完全不变。
+  const settingsBody = `
   <div class="set-group">
     <h3>播放</h3>
     <div class="set-row">
@@ -4948,10 +4987,16 @@ function settingsHtml() {
       </div>
     </div>
     <div class="set-row"><div><b>清空播放记录</b><small>清空最近播放与听歌报告统计；同账号的其他设备同步后也会一起清空</small></div><button class="btn small" data-clear="history">清空</button></div>
-  </div>
+  </div>`
 
+  // 更新说明入口：iOS 端放到「关于」卡片里（Windows 端仍用独立的 aboutPageHtml）。
+  const changelogRow = IS_IOS ? `
+    <div class="set-row ios-about-changelog"><div><b>更新说明</b><small>查看最近 3 个版本的更新内容</small></div><button class="btn small" id="setChangelog">查看</button></div>` : ''
+
+  const aboutBody = `
   <div class="set-group">
     <h3>关于</h3>
+    ${changelogRow}
     <div class="set-row"><div><b>Orange Music · 橙子音乐 v${APP_VERSION}</b><small>iOS 网页 / PWA 版 · 与 Windows 桌面端同一份代码跨平台运行</small></div></div>
     <div class="set-row"><div><b>作者</b><small>12</small></div></div>
     <div class="set-row"><div><b>数据与隐私</b><small>不上报任何行为数据，不接入广告与统计 SDK；收藏、歌单、播放进度只写入你自己的账号或本机。</small></div></div>
@@ -4962,19 +5007,21 @@ function settingsHtml() {
     <div class="set-row"><div><b>开源组件</b><small>${IS_IOS ? '运行环境为 Safari / WebKit（系统自带），界面与业务代码为 MIT 开源。' : 'Electron / Chromium（BSD 等开源许可），界面与业务代码为 MIT 开源。'}</small></div></div>
     <div class="set-row"><div><b>项目主页</b><small>源码与版本发布托管在 GitHub：<a class="repo-link" href="${esc(PROJECT_HOMEPAGE)}" target="_blank" rel="noopener" title="在浏览器打开项目主页">${esc(PROJECT_HOMEPAGE)} ↗</a></small></div></div>
   </div>`
-  // iOS：手机上没有「桌面端标题条」，用带返回键的 ios 页头；整页外层加 .ios-page 控制底部留白，
-  // 否则最后一行会被 dock 压住（用户反馈的「设置页超出屏幕」）。
+  // iOS：设置页拆成「设置 / 关于」两个卡片（tab 样式参照 Music / 乐库 页顶部），
+  // 外层 .ios-page 控制底部留白，避免最后一行被 dock 压住。
   if (IS_IOS) {
+    const at = S.iosSetTab === 'about' ? 'about' : 'settings'
     return `<div class="ios-page ios-setpage">
-      <header class="ios-head">
-        <button class="ios-round" data-ios-go="player" aria-label="返回">${IOS_IC.back}</button>
-        <h1>设置</h1>
-        <span class="ios-head-tools"></span>
+      <header class="ios-mtabs ios-set-tabs">
+        <button class="ios-mback" data-ios-go="player" aria-label="返回播放页">‹</button>
+        <button class="ios-mtab${at === 'settings' ? ' on' : ''}" data-ios-settab="settings">设置</button>
+        <button class="ios-mtab${at === 'about' ? ' on' : ''}" data-ios-settab="about">关于</button>
+        <span class="ios-mtabs-gap"></span>
       </header>
-      ${body}
+      ${at === 'about' ? aboutBody : settingsBody}
     </div>`
   }
-  return `${head('设置', '播放 · 音源 · 存储 · 更新 · 关于')}${body}`
+  return `${head('设置', '播放 · 音源 · 存储 · 更新 · 关于')}${settingsBody}${aboutBody}`
 }
 
 // 关于：独立页面（不再弹窗）。包含版本 / 检查更新 / 自动检查 / 项目主页（一键打开超链）/ 隐私 / 音源合规 / 第三方声明 / 开源组件。
@@ -5013,7 +5060,24 @@ function aboutPageHtml() {
   </div>`
 }
 
-// 更新内容查看：同页面浮层，展示最近版本的更新说明（取自 GitHub Releases）。
+// 更新内容数据源：iOS 端的更新说明随站点一起发布（ios/RELEASE_NOTES/*.md → release-notes.json），
+// 不再从 GitHub Releases 读取 —— GitHub 的 Release Notes 现在只描述 Windows 桌面端。
+// 带时间戳查询参数跳过 SW / HTTP 缓存，保证每次打开都是最新的说明。
+let _releaseNotesCache = null
+let _releaseNotesCacheAt = 0
+async function loadReleaseNotes() {
+  const now = Date.now()
+  if (_releaseNotesCache && now - _releaseNotesCacheAt < 60000) return _releaseNotesCache
+  const res = await fetch(`./release-notes.json?t=${now}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  const releases = Array.isArray(data?.releases) ? data.releases : []
+  _releaseNotesCache = releases
+  _releaseNotesCacheAt = now
+  return releases
+}
+
+// 更新内容查看：同页面浮层，展示最近版本的更新说明（取自本地 release-notes.json）。
 // opts.whatsNew=true 时只显示最新一版、标题改为「本次更新内容」，用于更新完成后弹出。
 async function openChangelog(opts = {}) {
   const limit = opts.whatsNew ? 1 : (opts.limit || 3)
@@ -5034,10 +5098,9 @@ async function openChangelog(opts = {}) {
   box.querySelectorAll('[data-close]').forEach((el) => { el.onclick = () => box.classList.add('hidden') })
   const body = box.querySelector('.om-cl-body')
   try {
-    const r = await S.core.updater.recentReleases(limit, { force: true })
-    if (!r.ok) { body.innerHTML = `<div class="om-cl-empty">获取更新记录失败：${esc(String(r.error || ''))}</div>`; return }
-    if (!r.releases || !r.releases.length) { body.innerHTML = `<div class="om-cl-empty">暂无已发布的版本记录</div>`; return }
-    body.innerHTML = r.releases.map((rel) => `
+    const releases = await loadReleaseNotes()
+    if (!releases.length) { body.innerHTML = `<div class="om-cl-empty">暂无更新说明</div>`; return }
+    body.innerHTML = releases.slice(0, limit).map((rel) => `
       <div class="om-cl-item">
         <div class="om-cl-meta"><span class="om-cl-ver">v${esc(String(rel.version || ''))}</span>${rel.date ? `<span class="om-cl-date">${esc(String(rel.date))}</span>` : ''}</div>
         <div class="om-cl-notes">${rel.notes ? esc(String(rel.notes)).replace(/\n/g, '<br>') : '（无说明）'}</div>
@@ -5708,6 +5771,13 @@ function bindView() {
     if (sheet) { sheet.hidden = false; try { bindAuthSheet() } catch { /* 已绑定 */ } }
   })
   $('#iosLogout') && ($('#iosLogout').onclick = async () => {
+    // 本地测试账号：记「已退出」标记，重启后不再自动登录；想再测从登录面板一键启用
+    if (S.localTest) {
+      try { localStorage.setItem('orangemusic:testLoggedOut', '1') } catch { /* 隐私模式 */ }
+      try { await S.core.auth.signOut() } catch { /* 无真实云端会话，失败可忽略 */ }
+      location.reload()
+      return
+    }
     if (!S.cloud) return toast('核心未就绪')
     await S.core.auth.signOut()
     location.reload()
