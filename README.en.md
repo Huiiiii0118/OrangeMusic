@@ -30,7 +30,7 @@
 | | |
 |---|---|
 | Form | An HTTPS web app; open it in Safari and **Add to Home Screen** for an app-like experience |
-| UI | **Apple Music style**: large titles, frosted-glass mini player, bottom tab bar, full-screen lyrics, animated visualiser |
+| UI | Large titles, frosted-glass mini player, bottom tab bar, full-screen lyrics, animated visualiser |
 | Streaming | Resolved by the **same-origin server** (`/api/search`, `/api/url`, `/api/charts`). The server races Bodian against a GD mirror and validates title / artist / duration to return a full 320 kbps link |
 | Lock screen | Line 1 `Title - Artist`, line 2 the current lyric line; controls are **previous · play/pause · next** |
 | Offline shell | A service worker caches the app shell so it opens instantly even if the network is flaky (audio still needs the network) |
