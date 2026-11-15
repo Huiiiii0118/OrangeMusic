@@ -3935,7 +3935,7 @@ const rowToTrack = (r) => makeTrack({
 })
 
 // ---- 设置 ----
-const APP_VERSION = '1.0.0'
+const APP_VERSION = '1.0.1'
 const fmtBytes = (n) => (n > 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 const lsSize = () => {
   try { return Object.keys(localStorage).reduce((n, k) => n + k.length + (localStorage.getItem(k) || '').length, 0) } catch { return 0 }
@@ -3946,11 +3946,22 @@ const switchHtml = (id, on) => `<label class="switch"><input type="checkbox" id=
 const updateResultHtml = (u) => {
   if (!u) return ''
   const sz = u.asset?.size && S.core?.updater ? S.core.updater.sizeText(u.asset.size) : ''
-  if (!u.ok) {
-    return `<div class="set-row"><div><b>检查失败</b><small>${esc(u.error || '未知错误')}</small></div><span class="pill">${esc(u.repo || '')}</span></div>`
-  }
+  // 检查失败不再渲染结果行（旧实现会把「仓库或 Release 不存在」+ 历史更新源当成一条告警摆在这里）。
+  // 手动检查失败用 toast 提示即可，自动检查保持静默。
+  if (!u.ok) return ''
   if (!u.hasUpdate) {
-    return `<div class="set-row"><div><b>已是最新版本</b><small>${esc(u.repo)} · 最新 ${esc(u.latest || APP_VERSION)}${u.publishedAt ? ` · ${esc(String(u.publishedAt).slice(0, 10))}` : ''}</small></div><span class="pill accent">${esc(u.current)}</span></div>`
+    // latest = 仓库已发布的最新版本；current = 本机版本。二者可能不同（如本机是尚未发布的测试版），
+    // 文案必须分别标清，否则会出现「已是最新版本 · 最新 1.0.0」而本机 pill 却是 1.0.1 的自相矛盾。
+    const latest = u.latest || APP_VERSION
+    // 轻量版本比较（a>b 返回正数）：只比数字段，够用来判断「本机是否新于仓库发布版」。
+    const verNum = (v) => String(v || '').split(/[.\-]/).map((n) => parseInt(n, 10) || 0)
+    const cmpVers = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d } return 0 }
+    const ahead = cmpVers(u.current, latest) > 0   // 本机比仓库发布的还新（本地测试版）
+    const title = ahead ? '当前版本新于已发布版' : '已是最新版本'
+    const detail = ahead
+      ? `${esc(u.repo)} · 仓库已发布 ${esc(latest)}${u.publishedAt ? ` · ${esc(String(u.publishedAt).slice(0, 10))}` : ''}`
+      : `${esc(u.repo)} · 当前已是最新${u.publishedAt ? ` · ${esc(String(u.publishedAt).slice(0, 10))}` : ''}`
+    return `<div class="set-row"><div><b>${title}</b><small>${detail}</small></div><span class="pill accent">${esc(u.current)}</span></div>`
   }
   return `<div class="upd-card">
     <div class="upd-head"><b>发现新版本 ${esc(u.latest)}</b><span class="pill accent">当前 ${esc(u.current)}</span></div>
@@ -4051,6 +4062,8 @@ function settingsHtml() {
 // 关于：独立页面（不再弹窗）。包含版本 / 检查更新 / 自动检查 / 项目主页（一键打开超链）/ 隐私 / 音源合规 / 第三方声明 / 开源组件。
 // 项目主页默认指向官方仓库；用户仍可在下方把「更新源」改成自己的 fork / 私有镜像。
 const PROJECT_REPO = 'Huiiiii0118/OrangeMusic'
+// iOS 版部署地址（带分享码与分享 ID）：关于页「复制链接」按钮用它。
+const IOS_APP_URL = 'https://quiet-music.app.workbuddy.host/?sharecode=ADU5MSWA3L&shareId=c1001b2e02844559982c910875e67ee5'
 const PROJECT_HOMEPAGE = `https://github.com/${PROJECT_REPO}`
 function aboutPageHtml() {
   const upCfg = S.core?.updater?.readCfg?.() || { repo: '', auto: true }
@@ -4068,6 +4081,10 @@ function aboutPageHtml() {
     <div class="set-row"><div><b>更新内容</b><small>查看最近 3 个版本的更新说明</small></div><button class="btn small" id="setChangelog">查看</button></div>
     <div class="set-row">
       <div><b>项目主页</b><small>源码与版本发布都托管在 GitHub：<a class="repo-link" href="${esc(PROJECT_HOMEPAGE)}" target="_blank" rel="noopener" title="在浏览器打开项目主页">${esc(PROJECT_HOMEPAGE)} ↗</a></small></div>
+    </div>
+    <div class="set-row">
+      <div><b>iOS 版 —— 网页 / PWA</b><small>复制链接（使用 Safari 粘贴并打开）：手机上无需安装，添加到主屏幕即像原生应用</small></div>
+      <button class="btn small" id="setCopyIosUrl">复制链接</button>
     </div>
   </div>
   <div class="set-group">
@@ -4207,6 +4224,51 @@ function bindModeMenu() {
     if (e.target.closest('#modeMenu, #npModeBtn, #modeBtn')) return
     closeModeMenu()
   })
+}
+
+// 复制到剪贴板：Electron 的 app:// 是安全上下文，clipboard API 通常可用；
+// 老环境回退到 textarea + execCommand，避免「点了没反应」。
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true }
+  } catch { /* 回退 */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0'
+    document.body.appendChild(ta)
+    ta.select(); ta.setSelectionRange(0, ta.value.length)
+    const ok = document.execCommand('copy')
+    ta.remove()
+    return ok
+  } catch { return false }
+}
+
+// iOS 版使用引导：复制成功后的说明弹窗（有关闭按钮，Esc / 点遮罩也能关）
+function openIosGuide() {
+  if (document.querySelector('.sheet.ios-guide')) return
+  const wrap = document.createElement('div')
+  wrap.className = 'sheet ios-guide'
+  wrap.innerHTML = `<div class="sheet-card ask-card" role="dialog" aria-modal="true" aria-label="iOS 版使用步骤">
+    <h2>已复制，使用步骤</h2>
+    <ol class="ios-guide-steps">
+      <li>用 Safari 打开部署地址，等待应用加载完成。</li>
+      <li>分享按钮 → 添加到主屏幕，之后从主屏幕图标启动。</li>
+      <li>首次播放需要一次点击（iOS 的音频授权策略）。</li>
+    </ol>
+    <p class="ios-guide-url">${esc(IOS_APP_URL)}</p>
+    <div class="btn-row end"><button class="btn small" data-ios-guide-close>关闭</button></div>
+  </div>`
+  document.body.appendChild(wrap)
+  const done = () => {
+    document.removeEventListener('keydown', onKey, true)
+    wrap.remove()
+  }
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done() } }
+  document.addEventListener('keydown', onKey, true)
+  wrap.querySelector('[data-ios-guide-close]').onclick = done
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) done() })
 }
 
 // 检查更新：手动点会绕过 10 分钟缓存并把结果留在设置页
@@ -4742,6 +4804,12 @@ function bindView() {
     }
   }
   $('#setDemoBtn') && ($('#setDemoBtn').onclick = playDemo)
+  // iOS 版入口：复制部署地址 + 弹窗给三步说明（样式与「关闭确认」弹窗一致）
+  $('#setCopyIosUrl') && ($('#setCopyIosUrl').onclick = async () => {
+    const ok = await copyTextToClipboard(IOS_APP_URL)
+    toast(ok ? '已复制部署地址' : '复制失败，请手动选中地址复制')
+    openIosGuide()
+  })
   $('#setUpdateCheck') && ($('#setUpdateCheck').onclick = () => runUpdateCheck(true))
   $('#setChangelog') && ($('#setChangelog').onclick = () => openChangelog())
   $('#setAutoUpdate') && ($('#setAutoUpdate').onchange = (e) => {

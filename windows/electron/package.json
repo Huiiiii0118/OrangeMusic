@@ -1,7 +1,7 @@
 {
   "name": "orange-music-desktop",
   "productName": "橙子音乐",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Orange Music（橙子音乐）· 独立 Windows 桌面应用（内置 Chromium，全部依赖随包）",
   "main": "main.cjs",

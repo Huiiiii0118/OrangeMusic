@@ -12,7 +12,7 @@ const LS = 'orangemusic:update:v1'
 const CACHE_MS = 10 * 60 * 1000
 
 // 当前版本：改版本号只改这一处 + package.json。
-export const CURRENT_VERSION = '1.0.0'
+export const CURRENT_VERSION = '1.0.1'
 
 const DEFAULTS = Object.freeze({
   repo: 'Huiiiii0118/OrangeMusic',   // 官方仓库：OrangeMusic
@@ -31,7 +31,13 @@ const write = (v) => {
 
 export function readCfg() {
   const j = read()
-  return { repo: j.repo || DEFAULTS.repo, auto: j.auto !== false, last: j.last || null }
+  // 设置页已不再提供「更新源」编辑入口，任何非官方仓库地址都是历史遗留（早期版本存过
+  // 'orangemusic/orange-music'、'organgemusic/orangemusic' 这类占位值），会让检查更新 404。
+  // 这里统一纠正并落盘，之后永远按官方仓库检查。
+  const raw = String(j.repo || '').trim()
+  const repo = raw && raw.toLowerCase() === DEFAULTS.repo.toLowerCase() ? raw : DEFAULTS.repo
+  if (raw && raw !== repo) { try { write({ ...j, repo }) } catch { /* 隐私模式 */ } }
+  return { repo, auto: j.auto !== false, last: j.last || null }
 }
 
 export function saveCfg(patch = {}) {

@@ -30,6 +30,7 @@
 | | |
 |---|---|
 | Form | An HTTPS web app; open it in Safari and **Add to Home Screen** for an app-like experience |
+| Entry | Deployed URL: click **Copy link** in the Windows app under **Settings → About → “iOS — Web / PWA”** to copy it in one click |
 | UI | Large titles, frosted-glass mini player, bottom tab bar, full-screen lyrics, animated visualiser |
 | Streaming | Resolved by the **same-origin server** (`/api/search`, `/api/url`, `/api/charts`). The server races Bodian against a GD mirror and validates title / artist / duration to return a full 320 kbps link |
 | Lock screen | Line 1 `Title - Artist`, line 2 the current lyric line; controls are **previous · play/pause · next** |
@@ -151,11 +152,6 @@ third-party sources rests with the user. **Do not use commercially or redistribu
 
 The source code is **open source**: released under the **MIT Licence** — see the repository's
 root [LICENSE](LICENSE) file for the full text.
-
-- ✅ **Use freely** — personal, team or commercial use;
-- ✅ **Modify freely** — fork it, change it, build your own player on top of it;
-- ✅ **Redistribute** — ship modified versions, with or without publishing your changes;
-- ⚠️ **The only requirement** — keep the original copyright and MIT licence notice.
 
 > MIT covers **this project's own code** only. Third-party components (Electron / Chromium / the music
 > engines) keep their own licences. Audio copyright stays with the original artists and distributors and is

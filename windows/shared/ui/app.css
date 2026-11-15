@@ -2229,3 +2229,13 @@ html[data-striplogo="1"] .hero-slide:hover .hero-cover > img { transform: scale(
 /* ── iOS 专属元素兜底：只在 theme-ios.css 里显示，Windows 视觉不受影响 ── */
 .np-ios-top, .np-ios-tag, .np-ios-badges, .np-ios-actions, .np-ios-hint,
 .ios-sheet, .ios-mask { display: none; }
+
+/* 关于页 iOS 引导弹窗：与「关闭确认」弹窗同一套卡片风格 */
+.ios-guide .ask-card { width: min(460px, 92vw); }
+.ios-guide h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.ios-guide-steps { margin: 0 0 10px; padding-left: 20px; font-size: 12.5px; line-height: 1.95; color: var(--ink-2); }
+.ios-guide-steps li { margin: 2px 0; }
+.ios-guide-url { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px;
+  background: var(--surface-2, #f2f2f4); border: 1px solid var(--line);
+  font: 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink-2); word-break: break-all; user-select: all; }

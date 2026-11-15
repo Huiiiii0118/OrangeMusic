@@ -1,6 +1,6 @@
 {
   "name": "orange-music-windows",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Orange Music · 橙子音乐 Windows 桌面版（独立项目，与 ios/ 互不依赖）",
