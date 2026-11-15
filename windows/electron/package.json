@@ -1,0 +1,67 @@
+{
+  "name": "orange-music-desktop",
+  "productName": "橙子音乐",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orange Music（橙子音乐）· 独立 Windows 桌面应用（内置 Chromium，全部依赖随包）",
+  "main": "main.cjs",
+  "author": "OrangeMusic",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "host.workbuddy.orangemusic",
+    "productName": "橙子音乐",
+    "asar": true,
+    "compression": "normal",
+    "directories": {
+      "app": ".",
+      "output": "../dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "net.cjs",
+      "local-api.cjs",
+      "preload.cjs",
+      "www/**/*",
+      "build/icon.ico",
+      "build/icon-tray.png"
+    ],
+    "asarUnpack": [],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "OrangeMusic.exe",
+      "legalTrademarks": "OrangeMusic"
+    },
+    "portable": {
+      "artifactName": "OrangeMusic.exe",
+      "requestExecutionLevel": "user",
+      "unpackDirName": "OrangeMusic",
+      "splashImage": "build/splash.bmp"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
+  },
+  "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "^4.41.1",
+    "@unblockneteasemusic/server": "^0.28.0"
+  }
+}

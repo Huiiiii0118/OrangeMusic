@@ -1,0 +1,13 @@
+{
+  "name": "orange-music-windows",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Orange Music · 橙子音乐 Windows 桌面版（独立项目，与 ios/ 互不依赖）",
+  "scripts": {
+    "build": "node tools/build_web.js --out electron/www --platform windows",
+    "build:exe": "node tools/build_exe.mjs",
+    "start": "electron/node_modules/electron/dist/electron.exe electron",
+    "icons": "python tools/make_logo_round.py"
+  }
+}

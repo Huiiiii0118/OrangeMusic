@@ -1,0 +1,37 @@
+{
+  "id": "./",
+  "name": "Orange Music · 橙子音乐",
+  "short_name": "橙子音乐",
+  "description": "WorkBuddy 风格的无广告音乐播放器：授权音源、实时推荐、歌单导入、iOS 网页与 Windows 双端同步。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff6ee",
+  "theme_color": "#e8620a",
+  "categories": [
+    "music",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

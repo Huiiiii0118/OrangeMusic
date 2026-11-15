@@ -1,0 +1,17 @@
+{
+  "name": "orange-music-ios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "橙子音乐 iOS PWA（独立项目）+ orange-music-api 音源中转服务",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node tools/build_web.js --out www --platform ios",
+    "icons": "python tools/make_logo_round.py"
+  },
+  "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "^4.41.1",
+    "@unblockneteasemusic/server": "^0.28.0"
+  }
+}

@@ -1,0 +1,34 @@
+# Orange Music · 上传 GitHub 时排除的产物
+# 源码真源：ios/shared/、ios/server.js、ios/tools/、windows/shared/、windows/electron/*.cjs|nsi、windows/tools/
+
+# 依赖（体积极大，用 npm install 还原）
+node_modules/
+**/node_modules/
+
+# 构建 / 交付产物（由 tools/build_web.js、tools/build_exe.mjs 重新生成）
+windows/dist/
+windows/electron/win-unpacked/
+windows/electron/www/
+ios/www/
+ios/build/
+
+# 自检 / 调试临时数据（截图、探针、Electron 临时用户数据）
+windows/electron/.pr*/
+windows/electron/.st*/
+windows/electron/.selftest_*/
+windows/electron/_*.png
+windows/electron/_*.log
+windows/electron/_*.cjs
+ios/build/_shots/
+
+# 本机 / 工具元数据
+.workbuddy/
+*.genie
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+
+# Release 暂存目录：里面的 exe 有 122MB，GitHub 单文件上限 100MB 会直接拒收。
+# 发布时在网页端把 GitHub/*.exe 拖进 Release 附件即可，不要提交进仓库。
+GitHub/

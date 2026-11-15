@@ -1,0 +1,110 @@
+/* Windows exe · macOS 风格
+   交通灯窗口、vibrancy 侧栏、毛玻璃工具栏、系统蓝强调色、Finder 式分区导航。 */
+:root {
+  --brand: #ff8412;
+  --brand-strong: #ea6800;
+  --brand-soft: #fff0e4;
+  --paper: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --line: rgba(0, 0, 0, .09);
+  --ink: #1d1d1f;
+  --ink-2: #515156;
+  --ink-3: #8e8e93;
+  --r-lg: 12px; --r-md: 9px; --r-sm: 6px;
+  --shadow: 0 6px 20px rgba(20, 30, 60, .1);
+}
+body { background: var(--surface); }
+
+/* 内容直接铺满窗口：不再模拟「浮在壁纸上的圆角卡片」那一层外壳 */
+.window { max-width: none; width: 100%; height: 100dvh; margin: 0;
+  grid-template-rows: 52px minmax(0, 1fr) 82px;
+  border-radius: 0; border: 0; box-shadow: none; background: var(--surface); }
+
+/* 顶栏：一条普通工具栏，没有交通灯、没有品牌条、不描窗口边 */
+.titlebar { padding: 0 14px; gap: 12px;
+  background: var(--surface); border-bottom: 1px solid var(--line); }
+.search-box { background: var(--surface-2); border-color: transparent; }
+.search-box:focus { background: var(--surface); }
+.pill { background: var(--surface-2); }
+
+/* 细滚动条：平时很淡，悬停才明显，不再是一整条白色宽轨 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .14); border-radius: 10px;
+  border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, .3); background-clip: content-box; }
+
+/* 侧栏 vibrancy */
+.workspace { grid-template-columns: 218px minmax(0, 1fr); }
+.sidebar { background: rgba(235, 238, 244, .58); border-right: 1px solid rgba(0, 0, 0, .07);
+  backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); }
+.side-label { text-transform: uppercase; letter-spacing: .07em; font-size: 10px; }
+.nav-item { border-radius: 7px; }
+.nav-item[aria-current="page"] { background: rgba(10, 132, 255, .15); color: var(--brand-strong); }
+.nav-item .nav-ico { color: var(--brand); opacity: .8; }
+.main { background: linear-gradient(180deg, rgba(255, 255, 255, .97), rgba(250, 251, 253, .97)); }
+.tabbar { display: none; }
+
+/* 底部播放条：贴合窗口的半透明材质 */
+.player { background: rgba(246, 247, 249, .88); border-top: 1px solid rgba(0, 0, 0, .08);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); }
+.player .now .cover { border-radius: 7px; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.like-mini { color: #f2660a; }
+#likeBtn { color: #d81b32; }
+
+/* 首页 Banner / 快捷入口 / 卡片 */
+.banner { background: linear-gradient(118deg, #3b6fd4 0%, #7b5cd6 54%, #c264ac 100%);
+  box-shadow: 0 14px 32px rgba(70, 80, 160, .24); }
+.banner-btn { color: #264a86; }
+/* 推荐封面轮播：桌面端偏宽幅，圆角收敛 */
+.hero-carousel { border-radius: 12px; }
+.hero-slide { aspect-ratio: 21 / 9; }
+.hero-cover { width: min(36%, 170px); border-radius: 10px; }
+.strip-item .cover { border-radius: 8px; }
+.quick-ico { background: rgba(10, 132, 255, .1); color: var(--brand); }
+.chart-card, .cat, .library-hero { border-radius: 10px; }
+.cc-cover { border-radius: 8px; box-shadow: 0 3px 12px rgba(20, 30, 60, .1); }
+.cc-cover:hover { box-shadow: 0 10px 24px rgba(20, 30, 60, .18); }
+.cc-play { color: var(--brand); }
+.quality-sel { background: var(--surface); }
+.detail-cover { border-radius: 12px; }
+/* 桌面版侧栏已有「设置」，顶栏不再重复放齿轮 */
+.titlebar .set-btn { display: none; }
+.chart-card:hover, .cat:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(10, 132, 255, .12); }
+.card .cover { border: 1px solid rgba(0, 0, 0, .06); box-shadow: 0 3px 10px rgba(20, 30, 60, .08);
+  border-radius: 8px; transition: transform 180ms var(--ease), box-shadow 180ms var(--ease); }
+.card:hover .cover { transform: translateY(-3px); box-shadow: 0 10px 22px rgba(20, 30, 60, .16); }
+.artist-grid .cover { border-radius: 50%; }
+.row { border-bottom: 1px solid rgba(0, 0, 0, .05); }
+.row:hover { background: rgba(10, 132, 255, .055); border-radius: 8px; }
+.section-head h1 { font-size: 28px; }
+.field, .btn { border-radius: 8px; }
+.sheet-card { border-radius: 14px; }
+
+/* 全屏播放页 */
+.now-playing { background: linear-gradient(165deg, #fbeee1 0%, #fdf6f0 45%, #fefbf8 100%); }
+.np-bg { background: radial-gradient(circle at 20% 15%, rgba(10, 132, 255, .18), transparent 55%),
+                     radial-gradient(circle at 82% 78%, rgba(155, 90, 210, .16), transparent 55%); }
+.np-cover { border-radius: 14px; box-shadow: 0 22px 54px rgba(30, 40, 70, .24); }
+.np-inner { max-width: 1180px; margin: 0 auto; }
+.lyrics { font-size: 19px; }
+
+  @media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1c1c1e; --surface: #262628; --surface-2: #323234;
+    --line: rgba(255, 255, 255, .11);
+    --ink: #f5f5f7; --ink-2: #d1d1d6; --ink-3: #98989d;
+    --brand: #ff8412; --brand-strong: #ffa867; --brand-soft: #3b2114;
+  }
+  body { background: var(--surface); }
+  .window { border-color: transparent; box-shadow: none; }
+  .titlebar { background: var(--surface); border-bottom-color: rgba(255, 255, 255, .1); }
+  .sidebar { background: rgba(38, 39, 42, .6); border-right-color: rgba(255, 255, 255, .08); }
+  .main { background: linear-gradient(180deg, rgba(35, 36, 38, .97), rgba(28, 29, 31, .97)); }
+  .player { background: rgba(40, 41, 44, .86); border-top-color: rgba(255, 255, 255, .1); }
+  .pill { background: rgba(255, 255, 255, .08); }
+  .chart-card, .cat { background: var(--surface); }
+  .row:hover { background: rgba(10, 132, 255, .12); }
+  .now-playing { background: linear-gradient(165deg, #2a1e15 0%, #1e1813 60%, #161311 100%); }
+}

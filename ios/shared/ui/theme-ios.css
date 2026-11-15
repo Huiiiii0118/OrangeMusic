@@ -1,0 +1,1132 @@
+/* ============================================================
+   橙子音乐 · iOS PWA（按参考截图复刻）
+   只在本文件生效：build_web.js 仅在 --platform ios 时注入，
+   Windows 构建完全不加载本文件。
+   结构：内容区（内部滚动）+ 底部三件套 dock（首页 / 正在播放 / 队列）
+   ============================================================ */
+
+:root {
+  --brand: #ff7a1a;
+  --brand-2: #ff9f4d;
+  --bg: #0f1013;
+  --bg-2: #171920;
+  --card: #1c1e24;
+  --card-2: #262a32;
+  --line: rgba(255, 255, 255, .07);
+  --ink: #f7f8fa;
+  --ink-2: #b9bfc9;
+  --ink-3: #7c8391;
+  --gold: #e6bd7d;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --dock-h: 62px;
+  /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
+     不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
+  --paper: #0f1013;
+  --surface: #1c1e24;
+  --surface-2: #262a32;
+  /* app.css 的 .act-pill 等控件用 --surface-3/4 兜底浅灰，iOS 深色下必须给深色值，
+     否则出现「白底白字」的胶囊按钮。 */
+  --surface-3: #262a32;
+  --surface-4: #30353f;
+  --brand-soft: rgba(255, 122, 26, .16);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  --line: rgba(255, 255, 255, .08);
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
+body {
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.window {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100dvh; max-height: 100dvh;
+  padding-top: var(--safe-t);
+  overflow: hidden;
+  background: var(--bg);
+}
+.titlebar, .player, .sidebar, .mini-player { display: none !important; }
+.workspace { display: block; min-height: 0; height: 100%; }
+.main {
+  height: 100%; min-height: 0; padding: 0 0 calc(var(--dock-h) + 34px + var(--safe-b));
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.main::-webkit-scrollbar { display: none; }
+
+/* ── 底部三件套 dock（按参考图：圆键 + 短胶囊 + 圆键）──── */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 0 16px calc(10px + var(--safe-b));
+  height: calc(var(--dock-h) + 12px + var(--safe-b));
+  border: 0;
+  background: linear-gradient(180deg, rgba(15,16,19,0), rgba(15,16,19,.86) 34%, #0f1013 66%);
+}
+.ios-dock-key {
+  position: relative; flex: none;
+  width: 56px; height: 56px; border-radius: 50%; border: 0; padding: 0;
+  background: var(--card); color: var(--ink-2);
+  display: grid; place-items: center;
+}
+.ios-dock-key.on { color: var(--brand); }
+/* 播放队列键的未读红点已按需求移除：保留规则做兜底，任何遗留 DOM 都不再显示 */
+.ios-dock-badge { display: none !important; }
+/* 中央胶囊：外圈就是播放进度环；比两侧的圆形键更高更宽，三键整体等高 */
+.ios-dock-play {
+  position: relative; flex: none;
+  width: 176px; height: 56px;
+  border: 0; padding: 0; border-radius: 28px;
+  background: #15161b;
+  display: grid; place-items: center;
+}
+.ios-dock-play:active { transform: scale(.985); }
+.dock-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dock-ring-bg { fill: none; stroke: rgba(255, 255, 255, .10); stroke-width: 2; }
+.dock-ring-fg { fill: none; stroke: var(--brand); stroke-width: 2.4; stroke-linecap: round; transition: stroke-dashoffset .3s linear; }
+.dock-ico { position: relative; z-index: 1; display: grid; place-items: center; color: #fff; }
+@media (max-width: 360px) {
+  .ios-dock-play { width: 158px; }
+}
+
+/* ── 左侧抽屉（≡ 展开，内容 = 听你想听）────────── */
+.ios-drawer {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
+  display: block;
+  width: 87%; max-width: 348px;
+  padding: calc(var(--safe-t) + 10px) 18px calc(var(--dock-h) + 26px + var(--safe-b));
+  overflow-y: auto; overflow-x: hidden;
+  background: var(--bg);
+  transform: translateX(-102%);
+  transition: transform .26s cubic-bezier(.22, .7, .3, 1);
+  box-shadow: 26px 0 60px rgba(0, 0, 0, .55);
+  scrollbar-width: none;
+}
+.ios-drawer::-webkit-scrollbar { display: none; }
+.ios-drawer.open, html.drawer-open .ios-drawer { transform: none; }
+.ios-drawer { display: block; }
+.ios-drawer[hidden] { display: none; }
+.ios-drawer-mask[hidden] { display: none; }
+.ios-drawer-mask {
+  display: block; position: fixed; inset: 0; z-index: 190;
+  background: rgba(0, 0, 0, .5);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+.ios-drawer-mask[hidden] { display: none; }
+
+/* ── 页面骨架 ─────────────────────────────────── */
+.ios-page {
+  min-height: 100%;
+  padding: 0 18px calc(var(--dock-h) + 64px + var(--safe-b));
+}
+.ios-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0 14px;
+}
+.ios-head h1 {
+  margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -1.1px; color: var(--ink);
+}
+.ios-ava {
+  width: 34px; height: 34px; border-radius: 50%; border: 0; padding: 0; overflow: hidden;
+  background: linear-gradient(140deg, var(--brand-2), #ff4d2e); color: #fff;
+  font-size: 13px; font-weight: 700; display: grid; place-items: center;
+}
+.ios-empty { padding: 28px 0; text-align: center; font-size: 12.5px; color: var(--ink-3); }
+
+/* 首页：四宫格 */
+.ios-quad { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-bottom: 22px; }
+.ios-qc {
+  position: relative;
+  display: flex; flex-direction: column;
+  min-height: 96px; padding: 12px 13px;
+  border: 0; border-radius: 16px; background: var(--card);
+  text-align: left; color: var(--ink);
+}
+.ios-qc-ico {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255, 255, 255, .08); color: #fff;
+  display: grid; place-items: center; font-size: 12px;
+}
+.ios-qc.lead .ios-qc-ico { background: var(--brand); }
+.ios-qc-corner {
+  position: absolute; right: 12px; top: 14px;
+  font-size: 12px; letter-spacing: -1px; color: var(--ink-3);
+}
+.ios-qc-t { margin-top: auto; font-size: 16.5px; font-weight: 700; letter-spacing: -.2px; }
+.ios-qc-s { margin-top: 3px; font-size: 11px; color: var(--ink-3); }
+
+.ios-sec-h { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--ink-2); }
+.ios-stations { display: flex; flex-direction: column; gap: 10px; }
+.ios-stn {
+  position: relative; display: block; width: 100%; height: 116px;
+  border: 0; border-radius: 14px; overflow: hidden; padding: 0;
+  background: #23252c; text-align: left;
+}
+.ios-stn-bg {
+  position: absolute; inset: 0;
+  background-image: linear-gradient(135deg, hsl(var(--h, 24) 46% 30%), #1b1d23);
+  background-size: cover; background-position: center;
+  opacity: .95;
+}
+.ios-stn-shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(9,10,12,.82) 6%, rgba(9,10,12,.35) 58%, rgba(9,10,12,.05));
+}
+.ios-stn-txt { position: absolute; left: 14px; bottom: 13px; right: 14px; }
+.ios-stn-txt b {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 17px; font-weight: 750; color: #fff; letter-spacing: -.2px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .45);
+}
+.ios-stn-vip {
+  display: inline-grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #2fd07a; color: #06301a; font-size: 9px; font-style: normal;
+}
+.ios-stn-txt em {
+  display: block; margin-top: 4px; font-size: 11.5px; font-style: normal;
+  color: rgba(255, 255, 255, .72);
+}
+
+/* ── Mine ─────────────────────────────────────── */
+.ios-head-mine { padding-bottom: 12px; }
+.ios-head-tools { display: flex; align-items: center; gap: 8px; }
+.ios-vip-pill {
+  height: 26px; padding: 0 10px; border-radius: 999px;
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 700; color: #1d1503;
+  background: linear-gradient(140deg, #ffdc8a, #e8b44f);
+}
+.ios-round {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0;
+  background: var(--card); color: var(--ink-2); display: grid; place-items: center;
+}
+.ios-card { border-radius: 18px; background: var(--card); }
+.ios-idcard { display: flex; align-items: center; gap: 13px; padding: 15px 16px; }
+.ios-idcard-ava {
+  width: 42px; height: 42px; border-radius: 50%; flex: none; overflow: hidden;
+  border: 0; padding: 0; cursor: pointer;
+  background: linear-gradient(140deg, var(--brand-2), #ff4d2e); color: #fff;
+  font-size: 17px; font-weight: 800; display: grid; place-items: center;
+}
+.ios-idcard-meta { flex: 1; min-width: 0; }
+.ios-idcard-meta b {
+  display: block; font-size: 19px; font-weight: 800; letter-spacing: -.4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-idcard-tags { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.ios-tag-vip {
+  padding: 1px 6px; border-radius: 5px; font-size: 10px; font-style: normal; font-weight: 700;
+  color: #2a1c00; background: linear-gradient(140deg, #ffe0a0, #e9b455);
+}
+.ios-tag-gold {
+  display: inline-flex; align-items: center; gap: 1px;
+  padding: 1px 6px; border-radius: 5px; font-size: 10px; font-style: normal; font-weight: 600;
+  color: var(--gold); background: rgba(230, 189, 125, .13);
+}
+.ios-tag-gold svg { width: 11px; height: 11px; }
+.ios-idcard-side { flex: none; text-align: right; }
+.ios-idcard-side b { display: block; font-size: 17px; font-weight: 800; color: var(--ink); }
+.ios-idcard-side i { display: block; margin-top: 2px; font-size: 10px; font-style: normal; color: var(--ink-3); }
+
+.ios-gold-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 11px; }
+.ios-gold {
+  display: flex; align-items: center; gap: 10px;
+  height: 72px; padding: 0 14px; border: 0; border-radius: 15px;
+  background: linear-gradient(135deg, #5a4526, #2a2620);
+  text-align: left; color: #f4e3c4;
+}
+.ios-gold-ico { font-size: 19px; color: #f0c983; flex: none; }
+.ios-gold b { display: block; font-size: 14px; font-weight: 700; color: #ffe9c4; }
+.ios-gold i { display: block; margin-top: 3px; font-size: 10.5px; font-style: normal; color: rgba(244, 227, 196, .66); }
+
+.ios-promo {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  margin-top: 12px; padding: 13px 16px; border-radius: 14px;
+  background: linear-gradient(120deg, #3d2a6d, #5136a0 55%, #6b47c8);
+  overflow: hidden;
+}
+.ios-promo-txt { flex: 1; min-width: 0; }
+.ios-promo-txt b { display: block; font-size: 14.5px; font-weight: 750; color: #fff; }
+.ios-promo-txt i { display: block; margin-top: 3px; font-size: 10.5px; font-style: normal; color: rgba(255, 255, 255, .72); }
+.ios-promo-x {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px; border: 0; background: transparent;
+  color: rgba(255, 255, 255, .62); font-size: 14px; line-height: 1; padding: 0;
+}
+
+.ios-ent-row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.ios-ent { border: 0; background: transparent; padding: 0; text-align: left; }
+.ios-ent-cover {
+  display: grid; place-items: center;
+  width: 100%; aspect-ratio: 1 / 1; border-radius: 13px;
+  background: var(--card); overflow: hidden; color: var(--ink-3);
+}
+.ios-ent-cover img { width: 100%; height: 100%; object-fit: contain; }
+.ios-ent-ph { font-size: 20px; color: var(--ink-3); }
+.ios-ent-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 7px; }
+.ios-ent-row b {
+  font-size: 12px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-miniplay {
+  flex: none; width: 19px; height: 19px; border-radius: 50%;
+  background: var(--card-2); color: var(--ink-2);
+  display: grid; place-items: center;
+}
+
+.ios-plhead { display: flex; align-items: center; gap: 8px; margin: 22px 0 10px; }
+.ios-plhead b { font-size: 15px; font-weight: 700; }
+.ios-plhead span { font-size: 13px; color: var(--ink-3); }
+.ios-plhead em { font-size: 12.5px; font-style: normal; color: var(--ink-3); }
+.ios-plhead-tools { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.ios-plhead-tools button { border: 0; background: transparent; color: var(--ink-3); padding: 0; display: grid; place-items: center; }
+
+.ios-plist { display: flex; flex-direction: column; gap: 9px; }
+.ios-plrow { display: flex; align-items: center; gap: 12px; border: 0; background: transparent; padding: 0; text-align: left; }
+.ios-plrow-cv {
+  width: 52px; height: 52px; border-radius: 12px; overflow: hidden; flex: none;
+  background: var(--card); display: grid; place-items: center; color: var(--ink-3);
+}
+.ios-plrow-cv img { width: 100%; height: 100%; object-fit: contain; }
+.ios-plrow-cv.ph { font-size: 15px; }
+.ios-plrow-cv.ph.ai { font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+.ios-plrow-meta { min-width: 0; }
+.ios-plrow-meta b {
+  display: block; font-size: 14px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-plrow-meta i { display: block; margin-top: 3px; font-size: 11.5px; font-style: normal; color: var(--ink-3); }
+
+.ios-sec-row { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 10px; }
+.ios-sec-row b { font-size: 15px; font-weight: 700; }
+.ios-sec-row button { border: 0; background: transparent; color: var(--ink-3); padding: 0; display: grid; place-items: center; }
+
+/* 排行榜横滑大卡 */
+.ios-rank {
+  display: grid; grid-auto-flow: column; grid-template-columns: none; grid-template-rows: 1fr;
+  grid-auto-columns: 252px; gap: 11px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  margin: 0 -18px; padding: 0 18px 4px;
+}
+.ios-rank::-webkit-scrollbar { display: none; }
+.ios-rank-c { border-radius: 16px; background: var(--card); padding: 14px; }
+.ios-rank-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ios-rank-head > div { flex: 1; min-width: 0; }
+.ios-rank-head b { display: block; font-size: 16.5px; font-weight: 800; letter-spacing: -.4px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ios-rank-head em { display: block; margin-top: 3px; font-size: 10.5px; font-style: normal; color: var(--ink-3); }
+.ios-rank-play {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0;
+  background: var(--brand); color: #fff; display: grid; place-items: center;
+}
+.ios-rank-play .ios-miniplay { background: transparent; width: auto; height: auto; color: #fff; }
+.ios-rank-list { display: flex; flex-direction: column; gap: 8px; }
+.ios-rank-row { display: flex; align-items: center; gap: 9px; border: 0; background: transparent; padding: 0; text-align: left; }
+.ios-rank-n { flex: none; width: 12px; font-size: 12px; font-style: normal; font-weight: 700; color: var(--ink-3); }
+.ios-rank-cv { width: 38px; height: 38px; border-radius: 8px; overflow: hidden; flex: none; background: var(--card-2); }
+.ios-rank-cv img { width: 100%; height: 100%; object-fit: contain; }
+.ios-rank-meta { min-width: 0; flex: 1; }
+.ios-rank-meta b {
+  display: block; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-rank-meta i {
+  display: block; margin-top: 2px; font-size: 10.5px; font-style: normal; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── 全屏播放页 ───────────────────────────────── */
+/* 用网格固定五段：顶栏 / 封面 / 信息+歌词 / 操作 / 进度。
+   之前沿用桌面端的 flex 规则，歌词区会被挤成 0 高（用户看到「大量歌词没了」）。 */
+.now-playing {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: none;
+  align-content: stretch;
+  padding: calc(4px + var(--safe-t)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  background: #0b0c10; overflow: hidden;
+}
+.now-playing[hidden] { display: none !important; }
+.now-playing > * { grid-area: auto !important; }
+.np-bg {
+  position: absolute; inset: -10%; z-index: 0;
+  background-size: cover; background-position: center;
+  filter: blur(64px) saturate(140%) brightness(.42);
+  opacity: .95; transform: scale(1.06);
+}
+.np-wash {
+  position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
+}
+.np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
+.np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
+.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 1; }
+
+/* 顶部：菜单键 + 来源名 + VIP + 搜索 */
+.np-ios-top { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; }
+.np-ios-ibtn {
+  width: 34px; height: 34px; flex: none; border: 0; border-radius: 50%;
+  background: transparent; color: var(--ink); display: grid; place-items: center; padding: 0;
+}
+.np-ios-ibtn:last-child { background: rgba(255, 255, 255, .08); }
+.np-ios-title {
+  flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.np-ios-vip {
+  flex: none; height: 24px; padding: 0 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 700; color: #1d1503;
+  background: linear-gradient(140deg, #ffdc8a, #e8b44f);
+}
+
+/* 封面：与顶栏左右边缘对齐（用户要求），标题/歌手紧接在下方 */
+.now-playing .np-stage {
+  position: relative; width: 100%; flex: none;
+  height: auto; min-height: 0; margin: 10px 0 0;
+  max-height: none; padding: 0 !important; display: block;
+}
+.now-playing .np-turntable {
+  position: relative !important; inset: auto !important; padding: 0 !important;
+  display: block; width: 100%; height: auto;
+  background: none !important; box-shadow: none !important;
+  transform: none !important; margin: 0;
+}
+.now-playing .np-turntable::before, .now-playing .np-turntable::after { content: none !important; display: none !important; }
+.now-playing .np-platter, .now-playing .np-arm { display: none !important; }
+.now-playing .np-cover {
+  position: relative; display: block; margin: 0 auto;
+  width: 100%; max-width: 100%; height: auto; aspect-ratio: 1 / 1;
+  border-radius: 18px; overflow: hidden;
+  background: rgba(255, 255, 255, .05);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+  transform: none !important;
+}
+.now-playing .np-cover::before, .now-playing .np-cover::after { content: none !important; display: none !important; }
+.now-playing .np-cover img, .now-playing .np-cover .cover-fallback {
+  width: 100%; height: 100%; border-radius: 20px; object-fit: cover;
+  display: grid; place-items: center;
+}
+.np-ios-tag { display: none !important; }
+
+/* 曲目信息 + 歌词：占满中间剩余高度，歌词自己滚动，绝不溢出到操作行 */
+.now-playing .np-lyric-col {
+  display: flex; flex-direction: column; align-items: stretch;
+  justify-content: flex-start !important;
+  min-height: 0; height: 100%; padding-top: 14px; text-align: left;
+  overflow: hidden;
+}
+.now-playing .np-track { text-align: left; flex: 0 0 auto; }
+.now-playing .np-track h1 {
+  margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.6px; color: var(--ink);
+  text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 歌手：单独一行，紧跟在歌名下面 */
+.now-playing .np-track p {
+  display: block !important; margin: 5px 0 0; padding: 0;
+  font-size: 13.5px; color: var(--ink-3); text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.np-ios-badges { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; margin-top: 7px; }
+.np-ios-badges i {
+  padding: 1px 7px; border-radius: 4px; font-size: 10px; font-style: normal;
+  color: rgba(255, 255, 255, .62); background: rgba(255, 255, 255, .08);
+}
+.np-ios-badges i.vip { color: var(--gold); background: rgba(230, 189, 125, .14); }
+
+/* 歌词：只留当前行附近，剩余空间自然留白（同截图） */
+.now-playing .lyrics {
+  flex: 1 1 auto; min-height: 0; max-height: none; margin-top: 10px; padding: 0 !important;
+  overflow: hidden; text-align: left;
+  font-size: 14.5px; line-height: 1.9; font-weight: 600;
+  -webkit-mask-image: none; mask-image: none;
+}
+.now-playing .np-lyric-col .lyrics[data-state] {
+  display: block !important; padding: 0 !important; place-items: start;
+  min-height: 0;
+}
+.now-playing .lyrics .lyric-line { color: rgba(255, 255, 255, .34); }
+/* 当前行「染色」：跟 Windows 精简模式歌词同一套做法——品牌色按演唱进度填充，其余半透明白 */
+.now-playing .lyrics .lyric-line.on {
+  color: transparent;
+  background-image: linear-gradient(90deg, var(--brand) 0 var(--sung, 0%), rgba(255, 255, 255, .92) var(--sung, 0%) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+  transition: --sung .22s linear;
+}
+/* 逐字渐变：把 --sung 注册成可动画属性，4Hz 的进度事件由 CSS 连续补间，不再一格一格跳。
+   换句那一帧加 .lyric-jump 关掉过渡，让分界点瞬间归零，避免「倒退回第一个字」。 */
+@property --sung { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+.now-playing .lyrics .lyric-line.on.lyric-jump { transition: none; }
+.ly-row.on .ly-main { transition: --sung .22s linear; }
+.ly-row.on .ly-main.lyric-jump { transition: none; }
+.now-playing #miniLyricText { transition: --sung .22s linear; }
+.now-playing #miniLyricText.lyric-jump { transition: none; }
+
+/* 操作行 */
+.np-ios-actions { display: flex; align-items: center; gap: 20px; flex: none; height: 40px; margin-top: auto; }
+.np-ios-act {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 0; background: transparent; padding: 0;
+  color: rgba(255, 255, 255, .72); font-size: 11px;
+}
+.np-ios-act.on { color: var(--brand); }
+.np-ios-act.only { color: rgba(255, 255, 255, .78); }
+.np-ios-actions-gap { flex: 1; }
+
+/* 进度 */
+.np-bar { flex: none; padding-top: 4px; background: transparent; }
+.np-progress { display: flex; align-items: center; gap: 10px; }
+#npCurTime, #npTotalTime { display: none !important; }
+.np-progress input[type="range"] {
+  flex: 1; min-width: 0; height: 3px; border-radius: 999px;
+  appearance: none; -webkit-appearance: none;
+  background: linear-gradient(90deg, #fff 0 var(--p, 0%), rgba(255, 255, 255, .24) var(--p, 0%));
+}
+.np-progress input[type="range"]::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 10px; height: 10px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  /* 平时不显示：进度为 0 时这颗白点会孤零零挂在「喜欢」下面（用户反馈的小点），
+     按住进度条拖动时才出现，拖动反馈不受影响。 */
+  opacity: 0; transition: opacity .15s var(--ease, ease);
+}
+.np-progress input[type="range"]:active::-webkit-slider-thumb,
+.np-progress input[type="range"]:focus-visible::-webkit-slider-thumb,
+.np-progress input[type="range"].dragging::-webkit-slider-thumb { opacity: 1; }
+/* 播放页不再显示「自动音质」小字（用户要求删除） */
+.np-ios-hint { display: none !important; }
+
+/* 账号操作条（我的页） */
+.ios-account-bar { display: flex; gap: 10px; margin-top: 12px; }
+.ios-account-btn {
+  flex: 1; height: 38px; border: 0; border-radius: 12px;
+  background: var(--card); color: var(--ink-2);
+  font-size: 13px; font-weight: 600;
+}
+.ios-account-btn.primary { background: var(--brand); color: #fff; }
+
+/* ── 队列 / 更多（底部升起的 sheet）─────────── */
+.ios-mask { position: fixed; inset: 0; z-index: 60; display: block; background: rgba(0, 0, 0, .5); }
+.ios-mask[hidden] { display: none; }
+.ios-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 65;
+  display: flex; align-items: flex-end; justify-content: center;
+  max-height: 100dvh;
+}
+.ios-sheet[hidden] { display: none; }
+.ios-sheet-card {
+  width: 100%; max-height: 86dvh;
+  display: flex; flex-direction: column;
+  border-radius: 22px 22px 0 0; overflow: hidden;
+  background: var(--bg-2);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, .5);
+  padding-bottom: calc(var(--dock-h) + 14px + var(--safe-b));
+}
+.ios-sheet-x {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  width: 28px; height: 28px; border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, .38); color: #fff; font-size: 15px; line-height: 1; padding: 0;
+}
+.ios-q-hero { position: relative; height: 148px; flex: none; overflow: hidden; }
+.ios-q-hero-bg {
+  position: absolute; inset: 0;
+  background-image: linear-gradient(135deg, hsl(var(--h, 24) 40% 30%), #1b1d23);
+  background-size: cover; background-position: center;
+  filter: blur(2px) brightness(.9); transform: scale(1.04);
+}
+.ios-q-hero-shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(20,22,27,.25), rgba(20,22,27,.86));
+}
+.ios-q-hero-txt { position: absolute; left: 18px; right: 18px; bottom: 16px; }
+.ios-q-hero-txt b {
+  display: block; font-size: 17px; font-weight: 700; letter-spacing: -.3px; color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-q-hero-txt i { display: block; margin-top: 4px; font-size: 11.5px; font-style: normal; color: rgba(255, 255, 255, .66); }
+.ios-q-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 8px; flex: none; }
+.ios-q-head b { font-size: 15px; font-weight: 700; color: var(--ink); }
+.ios-q-head-tools { display: flex; align-items: center; gap: 12px; }
+.ios-q-head-tools button { border: 0; background: transparent; color: var(--ink-3); padding: 0; display: grid; place-items: center; }
+/* 播放模式：只留图标（用户要求），颜色与右侧 ⋮ 一致 */
+.ios-mode-btn {
+  display: inline-grid !important; place-items: center;
+  width: 28px !important; height: 28px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50%; background: transparent !important;
+  color: var(--ink-3) !important;
+}
+.ios-mode-btn svg { color: currentColor; }
+.ios-q-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; }
+.ios-q-row { display: flex; align-items: center; gap: 6px; border-radius: 12px; }
+/* 播放列表配色跟随底色，不做整行高亮（用户要求） */
+.ios-q-row.on { background: transparent; }
+.ios-q-row.on .ios-q-meta b { color: var(--ink); }
+.ios-q-row.on .ios-q-cv { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .22); }
+.ios-q-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; padding: 8px 6px; text-align: left; }
+.ios-q-cv { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; flex: none; background: var(--card); }
+.ios-q-cv img { width: 100%; height: 100%; object-fit: contain; }
+.ios-q-meta { min-width: 0; }
+.ios-q-meta b {
+  display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-q-row.on .ios-q-meta b { color: var(--ink); }
+.ios-q-meta i {
+  display: block; margin-top: 3px; font-size: 11px; font-style: normal; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-q-del { width: 30px; height: 30px; flex: none; border: 0; background: transparent; color: var(--ink-3); font-size: 15px; padding: 0; }
+
+/* 更多面板 */
+.ios-more-card { background: var(--bg-2); }
+.ios-more-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px 14px; flex: none; }
+.ios-more-cv { width: 52px; height: 52px; border-radius: 12px; overflow: hidden; flex: none; background: var(--card); display: grid; place-items: center; }
+.ios-more-cv img { width: 100%; height: 100%; object-fit: contain; }
+.ios-more-meta { flex: 1; min-width: 0; }
+.ios-more-meta b {
+  display: block; font-size: 15.5px; font-weight: 700; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-more-meta i { display: block; margin-top: 4px; font-size: 11.5px; font-style: normal; color: var(--ink-3); }
+.ios-more-shuffle {
+  flex: none; height: 30px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16); background: transparent;
+  color: var(--ink-2); font-size: 11.5px; display: inline-flex; align-items: center; gap: 5px;
+}
+.ios-more-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px 14px 14px; flex: none; }
+.ios-mt { border: 0; background: transparent; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.ios-mt span {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--card); color: var(--ink-2); display: grid; place-items: center;
+}
+.ios-mt i { font-size: 10px; font-style: normal; color: var(--ink-3); }
+.ios-more-rows { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 6px; }
+.ios-mrow { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; padding: 13px 12px; text-align: left; }
+.ios-mrow-ico { flex: none; color: var(--ink-2); display: grid; place-items: center; }
+.ios-mrow-label { flex: none; font-size: 13.5px; color: var(--ink); }
+.ios-mrow-val {
+  margin-left: auto; font-size: 12.5px; color: var(--ink-3);
+  max-width: 42%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-mrow em { font-size: 10.5px; font-style: normal; color: var(--ink-3); opacity: .8; }
+.ios-mrow em.on { color: var(--brand); }
+
+/* ── 列表 / 详情 / 设置等沿用页的深色化 ────────── */
+.section-head { padding: 10px 18px 8px; }
+.section-head h2 { color: var(--ink); font-size: 18px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 9px 18px; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.row .cover.tiny { width: 46px; height: 46px; border-radius: 10px; overflow: hidden; flex: none; }
+.row-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.row-sub { margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; padding: 0 18px; }
+.card-title { color: var(--ink); }
+.chip-row { display: flex; flex-wrap: nowrap !important; gap: 8px; overflow-x: auto; padding: 8px 18px; scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
+.chip { flex: none; height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 650; }
+.chip.on { background: var(--brand); color: #fff; }
+.btn, .field { border-radius: 12px; }
+.btn { height: 36px; font-size: 13px; background: var(--card); color: var(--ink); border: 0; }
+.btn.primary { background: linear-gradient(140deg, var(--brand-2), #ff5a1f); border: 0; color: #fff; }
+.search-box, input[type="search"], input[type="text"] { background: var(--card) !important; border: 0 !important; color: var(--ink) !important; }
+.search-box::placeholder { color: var(--ink-3); }
+.sheet-card, .ask-card, .sheet .card { border-radius: 22px; background: var(--bg-2); color: var(--ink); }
+[data-platform="ios"] .sheet { background: rgba(0, 0, 0, .62); }
+.list-page, .lib-page { color: var(--ink); }
+.empty { color: var(--ink-3); }
+
+/* ── iOS 设置页：适配手机宽度 + 深色控件 ─────── */
+.ios-setpage {
+  padding: calc(var(--safe-t) + 6px) 18px calc(var(--dock-h) + 44px + var(--safe-b));
+}
+.ios-setpage .ios-head { padding: 4px 0 10px; }
+.ios-setpage .ios-head h1 { font-size: 26px; }
+.ios-setpage .set-group { max-width: none; padding: 14px 0 2px; border-top: 1px solid var(--line); }
+.ios-setpage .set-group:first-of-type { border-top: 0; padding-top: 0; }
+.ios-setpage .set-group h3 {
+  margin: 0 0 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em;
+  color: var(--ink-3); text-transform: none;
+}
+.ios-setpage .set-row {
+  flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 0; border-bottom: 1px solid var(--line);
+}
+.ios-setpage .set-row:last-child { border-bottom: 0; }
+.ios-setpage .set-row > div { flex: 1 1 58%; min-width: 0; }
+.ios-setpage .set-row b { font-size: 14px; font-weight: 600; }
+.ios-setpage .set-row small { margin-top: 4px; font-size: 11.5px; line-height: 1.55; color: var(--ink-3); }
+.ios-setpage .set-row.full > div { flex: 1 1 100%; }
+.ios-setpage .quality-sel {
+  flex: none; width: auto; max-width: 44%; height: 32px; padding: 0 10px;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px;
+}
+.ios-setpage .btn { background: var(--card); color: var(--ink); border: 0; }
+.ios-setpage .btn.primary { background: var(--brand); color: #fff; }
+.ios-setpage .pill { background: rgba(255, 255, 255, .07); color: var(--ink-2); border-color: transparent; }
+.ios-setpage .btn-row { flex: 1 1 100%; justify-content: flex-end; gap: 8px; }
+.ios-setpage .field { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+/* 开关：关闭态用 iOS 的灰，打开态用品牌色 */
+.ios-setpage .switch i, .ios-page .switch i { background: rgba(120, 120, 128, .34); border: 0; }
+.ios-setpage .switch input:checked + i, .ios-page .switch input:checked + i { background: var(--brand); }
+.ios-setpage .switch i::after, .ios-page .switch i::after { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+
+@media (min-width: 700px) {
+  .window { max-width: 560px; margin: 0 auto; }
+  .tabbar, .ios-sheet { max-width: 560px; margin: 0 auto; }
+  .now-playing { max-width: 560px; margin: 0 auto; }
+}
+
+/* ============================================================
+   2026-11-14 下午：Music/乐库页、歌词详情页、dock 重排、统一页边距
+   ============================================================ */
+:root { --pad: 22px; }
+
+/* 所有页面统一左右边距 */
+.ios-page { padding-left: var(--pad); padding-right: var(--pad); }
+.ios-drawer { padding-left: var(--pad); padding-right: var(--pad); }
+.now-playing { padding-left: var(--pad); padding-right: var(--pad); }
+.ios-setpage { padding-left: var(--pad); padding-right: var(--pad); }
+.tabbar { padding-left: 14px; padding-right: 14px; }
+
+/* ── Music 页顶部 tabs ───────────────────── */
+.ios-mtabs {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 0 14px;
+}
+.ios-mback {
+  width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
+  background: var(--card); color: var(--ink-2); font-size: 19px; line-height: 1; padding: 0 0 3px;
+}
+.ios-mtab {
+  border: 0; background: transparent; padding: 0;
+  font-size: 19px; font-weight: 700; color: var(--ink-3); letter-spacing: -.3px;
+}
+.ios-mtab.on { color: var(--ink); font-weight: 800; }
+.ios-mtabs-gap { flex: 1; }
+.ios-msearch {
+  width: 38px; height: 38px; flex: none; border: 0; border-radius: 50%;
+  background: var(--card); color: var(--ink-2); display: grid; place-items: center;
+}
+
+/* Music 页卡片 */
+.mc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mc-card {
+  border: 0; border-radius: 16px; background: var(--card); padding: 12px;
+  text-align: left; color: var(--ink); display: flex; flex-direction: column; gap: 8px;
+}
+.mc-imgs { display: flex; gap: 6px; height: 96px; }
+.mc-imgs i {
+  flex: 1; border-radius: 10px; background: var(--card-2) center/cover no-repeat;
+}
+.mc-card b { font-size: 15px; font-weight: 750; }
+.mc-card em { font-style: normal; font-size: 13px; font-weight: 700; letter-spacing: -.2px; }
+.mc-sec { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
+.mc-sec b { font-size: 16px; font-weight: 750; }
+/* 乐库页「听你想听」入口：打开左侧抽屉（音乐库） */
+.mc-listen {
+  width: 100%; margin: 14px 0 2px; height: 52px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px; border: 0; border-radius: 14px;
+  background: var(--card); color: var(--ink);
+  font-size: 15px; font-weight: 700;
+}
+.mc-listen svg { width: 20px; height: 20px; color: var(--brand); flex: none; }
+.mc-listen span { flex: 1; text-align: left; }
+.mc-listen i { font-style: normal; color: var(--ink-3); font-size: 18px; }
+.mc-more { font-size: 12.5px; color: var(--ink-3); }
+.mc-list { display: flex; flex-direction: column; gap: 2px; }
+.mc-row-item {
+  display: flex; align-items: center; gap: 12px;
+  border: 0; background: transparent; padding: 7px 0; text-align: left;
+}
+.mc-cv { width: 46px; height: 46px; border-radius: 10px; overflow: hidden; flex: none; background: var(--card); }
+.mc-cv img { width: 100%; height: 100%; object-fit: cover; }
+.mc-meta { flex: 1; min-width: 0; }
+.mc-meta b { display: block; font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-meta i { display: block; margin-top: 3px; font-size: 11.5px; font-style: normal; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-heart { color: var(--ink-3); font-size: 16px; flex: none; }
+
+/* 乐库分类 */
+/* 乐库分类封面：grid 列下限必须是 0，否则长歌单名会把列撑出屏幕，
+   封面跟着被拉大到溢出（1fr 的最小宽度是 min-content）。窄屏自动降到两列。 */
+.ios-music { overflow-x: hidden; }
+.lib-block { margin-bottom: 22px; min-width: 0; }
+.lib-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; min-width: 0; }
+.lib-head b { font-size: 17px; font-weight: 800; }
+.lib-head span { font-size: 13px; font-weight: 700; color: var(--ink-3); letter-spacing: .02em; }
+.lib-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.lib-card { border: 0; background: transparent; padding: 0; text-align: left; min-width: 0; max-width: 100%; }
+.lib-cv {
+  display: block; width: 100%; max-width: 100%; aspect-ratio: 1 / 1; border-radius: 12px;
+  background: var(--card-2) center/cover no-repeat;
+  background-size: cover; background-position: center; overflow: hidden;
+}
+.lib-card i {
+  display: block; margin-top: 6px; min-width: 0; font-size: 12px; font-style: normal; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 359px) { .lib-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 设置开关状态标签：让「开了 / 关了」一眼可见，切换即时更新 */
+.ios-setpage .set-state {
+  display: inline-block; margin-top: 7px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-style: normal; font-weight: 700; letter-spacing: .02em;
+  background: rgba(120, 120, 128, .18); color: var(--ink-3);
+}
+.ios-setpage .set-state.on { background: rgba(250, 36, 60, .14); color: var(--brand); }
+/* 我的音乐子页空态 */
+.ios-lib-empty { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 42px 20px 20px; }
+.ios-lib-empty b { font-size: 15px; color: var(--ink); }
+.ios-lib-empty span { font-size: 12px; color: var(--ink-3); text-align: center; line-height: 1.5; }
+.ios-lib-empty .btn { margin-top: 6px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: var(--brand); color: #fff; }
+
+/* ── 搜索页 ─────────────────────────────── */
+.ios-search-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; }
+.ios-sback {
+  width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
+  background: transparent; color: var(--ink-2); font-size: 20px; line-height: 1; padding: 0 0 4px;
+}
+.ios-sinput {
+  flex: 1; min-width: 0; height: 38px; padding: 0 14px;
+  border: 0; border-radius: 12px; background: var(--card); color: var(--ink); font-size: 14px;
+}
+.ios-sinput::placeholder { color: var(--ink-3); }
+.ios-scancel { flex: none; border: 0; background: transparent; color: var(--brand); font-size: 14px; font-weight: 600; padding: 0 2px; }
+.ios-search .search-panel { display: none; }
+.ios-search .section-head { padding: 14px 0 6px; }
+.ios-search .section-head h2 { font-size: 16px; }
+.ios-search .ios-search-body { padding-bottom: 20px; }
+.ios-sstatus { min-height: 16px; font-size: 11.5px; color: var(--ink-3); }
+
+/* 分段控件（单曲/歌单/歌手/专辑 等）：原只有 Windows 适配，iOS 上会变成浏览器默认按钮，
+   这里统一成 iOS 全宽等分布局，选中段用浅卡片高亮 */
+.ios-page .tabs {
+  display: flex; width: 100%; gap: 0; padding: 3px; margin: 0 0 12px;
+  box-sizing: border-box; background: var(--card); border-radius: 11px;
+}
+.ios-page .tabs .tab {
+  flex: 1 1 0; min-width: 0; height: 30px; padding: 0 6px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ios-page .tabs .tab[aria-selected="true"] { background: var(--card-2); color: var(--ink); }
+
+/* 列表动作区胶囊：app.css 的同名规则回退 var(--surface-3, #f3f3f3) 浅灰，
+   深色下变成「白底白字」。双保险：① :root 里给 --surface-3/4 深色值；
+   ② 这里用 .list-actions .act-pill 提高优先级，无论 CSS 加载顺序都生效。
+   歌单 / 歌手详情页根节点没有 .ios-page 类，所以不能用 .ios-page 限定作用域。 */
+.list-actions { gap: 10px; margin: 0 0 14px; flex-wrap: wrap; }
+.list-actions .act-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 32px; padding: 0 16px; border: 0; border-radius: 16px;
+  background: var(--surface-3); color: var(--ink); font-size: 13px; font-weight: 600;
+}
+.list-actions .act-pill:hover { background: var(--surface-4); }
+.list-actions .act-pill:first-child { background: var(--brand); color: #fff; }
+.list-actions .act-pill:first-child:hover { background: var(--brand); opacity: .92; }
+.list-actions .act-pill.danger { color: #ff6b5e; background: var(--surface-3); }
+.list-actions .act-pill.danger:hover { background: rgba(255, 107, 94, .14); }
+.list-actions .la-flex { flex: 1; min-width: 8px; }
+.list-actions .la-count { color: var(--ink-3); font-size: 11.5px; }
+.list-actions .la-search { height: 32px; border-color: var(--line); color: var(--ink-3); }
+.list-actions .la-search-input { color: var(--ink); }
+
+/* 歌曲行功能键只保留「喜欢 / 更多」，统一推到最右，不跟歌名宽度乱跑。 */
+.row .row-main { flex: 1 1 auto; min-width: 0; }
+.row .row-tools { margin-left: auto; flex: none; gap: 6px; justify-content: flex-end; }
+.row .row-tools .icon-btn { flex: none; }
+
+/* 默认自动生成头像 / 自定义头像共用；头像容器统一裁成圆形 */
+.av-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+
+/* ── 歌词详情页 ─────────────────────────── */
+.ios-lyrics-page {
+  position: fixed; inset: 0; z-index: 210;
+  display: flex; flex-direction: column;
+  padding: calc(var(--safe-t) + 8px) var(--pad) calc(14px + var(--safe-b));
+  background: linear-gradient(180deg, #16233a 0%, #0f1116 62%, #0b0c10 100%);
+  transform: translateY(12px); opacity: 0; pointer-events: none;
+  transition: transform .22s ease, opacity .22s ease;
+}
+.ios-lyrics-page.open { transform: none; opacity: 1; pointer-events: auto; }
+.ios-lyrics-page[hidden] { display: none; }
+.ly-head { display: flex; align-items: center; gap: 12px; flex: none; padding-bottom: 10px; }
+.ly-x {
+  width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%;
+  background: transparent; color: var(--ink-2); font-size: 15px; padding: 0;
+}
+.ly-cover { width: 42px; height: 42px; border-radius: 8px; overflow: hidden; flex: none; background: var(--card); }
+.ly-cover img { width: 100%; height: 100%; object-fit: cover; }
+.ly-meta { flex: 1; min-width: 0; }
+.ly-meta b { display: block; font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ly-meta i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal; color: var(--ink-3); }
+.ly-like { flex: none; width: 36px; height: 36px; border: 0; background: transparent; color: var(--ink-3); font-size: 19px; }
+.ly-like.on { color: var(--brand); }
+.ly-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 12px 0 40px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.ly-body::-webkit-scrollbar { display: none; }
+.ly-row { margin: 16px 0; transition: opacity .2s ease; opacity: .42; }
+.ly-row.on { opacity: 1; }
+.ly-main {
+  margin: 0; font-size: 20px; line-height: 1.45; font-weight: 700;
+  color: #fff; letter-spacing: -.2px;
+}
+.ly-row.on .ly-main {
+  color: transparent;
+  background-image: linear-gradient(90deg, #ffd08a 0 var(--sung, 0%), #fff var(--sung, 0%) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  transition: --sung .22s linear;
+}
+.ly-tr { margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: rgba(255, 255, 255, .58); font-weight: 500; }
+.ly-empty { padding: 40px 0; text-align: center; color: var(--ink-3); font-size: 13px; white-space: pre-line; }
+.ly-bar { display: flex; align-items: center; gap: 18px; flex: none; padding-top: 8px; }
+.ly-btn {
+  width: 42px; height: 42px; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .10); color: #fff; font-size: 16px; padding: 0;
+}
+.ly-btn.play { width: 54px; height: 54px; font-size: 19px; }
+.ly-gap { flex: 1; }
+.ly-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 999px; background: transparent; color: var(--ink-2); font-size: 12.5px;
+}
+.ly-toggle.on { color: #fff; border-color: rgba(255, 255, 255, .5); }
+.ly-toggle i { font-style: normal; font-size: 10px; opacity: .8; }
+
+/* ── dock：三键统一高度、垂直居中 ── */
+.tabbar { gap: 12px; }
+.ios-dock-key { width: 56px; height: 56px; }
+.ios-dock-play { width: 150px; height: 56px; border-radius: 28px; }
+.ios-dock-play .dock-ico svg { width: 22px; height: 22px; }
+.ios-dock-np { height: 56px; }
+.ios-dock-q { position: relative; }
+.ios-q-tag {
+  position: absolute; right: -2px; bottom: -3px;
+  padding: 0 3px; border-radius: 4px;
+  background: var(--brand); color: #fff; font-size: 8px; font-style: normal; line-height: 12px;
+}
+
+/* ── 开关：更接近 iOS 原生 ── */
+.ios-setpage .switch { width: 50px; height: 30px; }
+.ios-setpage .switch i { width: 50px; height: 30px; border-radius: 999px; background: rgba(120, 120, 128, .32); }
+.ios-setpage .switch i::after {
+  top: 2px; left: 2px; width: 26px; height: 26px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+}
+.ios-setpage .switch input:checked + i::after { left: 2px; transform: translateX(20px); }
+
+/* 头像：去掉「我」字挤压，改成圆形渐变 + 居中字母 */
+.ios-ava, .ios-idcard-ava { font-weight: 800; letter-spacing: 0; }
+.ios-ava { width: 38px; height: 38px; font-size: 15px; }
+
+/* 播放页歌词只留一行（点一下进歌词详情页） */
+.now-playing .lyrics { max-height: 1.9em; }
+
+/* 短屏兜底：封面按视口高度封顶，保证歌名/歌词区永远有位置（真机 390×844 不受影响） */
+.now-playing .np-cover { max-height: 42vh; }
+.now-playing .np-lyric-col { min-height: 96px; }
+.now-playing .np-track { min-height: 54px; }
+
+/* 音质按钮：从 dock 移到播放页操作行（图标 + 档位小字，与队列/更多同一行） */
+.np-ios-quality { display: inline-flex; align-items: center; gap: 5px; color: rgba(255,255,255,.78); }
+.np-ios-quality i {
+  font-style: normal; font-size: 10px; line-height: 14px; padding: 0 4px;
+  border-radius: 4px; background: rgba(255,255,255,.10); color: rgba(255,255,255,.78);
+}
+
+/* 你的私荐歌单：两列卡片，适配 iOS 页面宽度。
+   坑：grid 用 1fr 时列宽下限是 min-content，长歌单名（white-space:nowrap）会把整列撑到
+   比屏幕还宽 → 第二张卡被推出屏幕（截图里那个「没适配页面」）。必须 minmax(0,1fr)
+   并给每一层 min-width:0，让标题按列宽省略而不是撑列。 */
+.pl-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 12px; width: 100%; min-width: 0; padding-bottom: 8px;
+}
+.ios-music { max-width: 100%; }
+.pl-card {
+  min-width: 0; width: 100%; overflow: hidden;
+  border: 0; background: transparent; padding: 0; text-align: left; color: var(--ink);
+}
+.pl-cv {
+  display: block; width: 100%; min-width: 0; aspect-ratio: 1 / 1; border-radius: 14px;
+  background: var(--card-2) center/cover no-repeat;
+}
+.pl-card b {
+  display: block; min-width: 0; margin-top: 8px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pl-card i {
+  display: block; min-width: 0; margin-top: 3px;
+  font-size: 11px; font-style: normal; color: var(--ink-3);
+}
+
+/* 歌词页：进度条 + 三键一体胶囊 + 翻译开关；行距与渐暗 */
+.ly-seek-wrap { flex: none; padding: 6px 0 14px; }
+.ly-seek {
+  width: 100%; height: 3px; border-radius: 999px; appearance: none; -webkit-appearance: none;
+  background: linear-gradient(90deg, #fff 0 var(--p, 0%), rgba(255, 255, 255, .22) var(--p, 0%));
+}
+.ly-seek::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 9px; height: 9px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
+.ly-ctl {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px; border-radius: 999px; background: rgba(255, 255, 255, .10);
+}
+.ly-ctl .ly-btn { background: transparent; width: 44px; height: 44px; display: grid; place-items: center; }
+.ly-ctl .ly-btn.play { width: 54px; height: 54px; background: rgba(255, 255, 255, .06); }
+.ly-bar { padding-top: 10px; }
+.ly-body { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 74%, transparent 98%); mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 74%, transparent 98%); }
+.ly-row { margin: 13px 0; }
+.ly-main { font-size: 19px; line-height: 1.4; }
+.ly-tr { font-size: 13px; margin-top: 5px; }
+
+/* 抽屉里的 Music / 乐库 入口 */
+.ios-drawer-entry { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.ios-dentry {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 0; border-radius: 14px;
+  background: var(--card); color: var(--ink); text-align: left;
+}
+.ios-dentry-ico {
+  width: 34px; height: 34px; flex: none; border-radius: 10px;
+  background: rgba(255, 122, 26, .16); color: var(--brand);
+  display: grid; place-items: center; font-size: 16px;
+}
+.ios-dentry-txt b { display: block; font-size: 14.5px; font-weight: 700; }
+.ios-dentry-txt i { display: block; margin-top: 2px; font-size: 11px; font-style: normal; color: var(--ink-3); }
+
+/* 四宫格：图标默认不高亮，仅当前来源 / 按下时点亮 */
+.ios-qc .ios-qc-ico { background: rgba(255, 255, 255, .08); color: var(--ink-2); transition: background .18s ease, color .18s ease; }
+.ios-qc.on .ios-qc-ico, .ios-qc:active .ios-qc-ico { background: var(--brand); color: #fff; }
+
+/* Music / 乐库 分页页里的「当前播放」小卡：与 dock 两侧圆键等高（56px） */
+.ios-dock-np {
+  position: relative; flex: none;
+  width: 176px; height: 56px; border: 0; padding: 0 10px;
+  border-radius: 28px; background: #15161b;
+  display: flex; align-items: center; gap: 9px; overflow: hidden;
+}
+.ios-dock-np-cv {
+  width: 40px; height: 40px; flex: none; border-radius: 9px; overflow: hidden;
+  background: rgba(255, 255, 255, .08); display: grid; place-items: center;
+}
+.ios-dock-np-cv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ios-dock-np-cv .cover-fallback { width: 100%; height: 100%; display: grid; place-items: center; font-size: 18px; color: rgba(255,255,255,.7); }
+.ios-dock-np-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; text-align: left; color: #fff; }
+.ios-dock-np-title { font-size: 13px; font-weight: 700; line-height: 1.25; overflow: hidden; white-space: nowrap; }
+.ios-dock-np-artist { font-size: 11px; line-height: 1.25; color: rgba(255, 255, 255, .62); overflow: hidden; white-space: nowrap; }
+.ios-dock-np-title > span, .ios-dock-np-artist > span { display: inline-block; }
+.ios-dock-np-title.scroll > span, .ios-dock-np-artist.scroll > span { animation: iosNpMarquee 7s linear infinite alternate; will-change: transform; }
+@keyframes iosNpMarquee { from { transform: translateX(0); } to { transform: translateX(var(--scroll, -24px)); } }
+.ios-dock-np-play {
+  width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-items: center;
+}
+.ios-dock-np-play:active { transform: scale(.94); }
+@media (max-width: 360px) {
+  .ios-dock-np { width: 158px; }
+}
+
+/* ── 设置开关：独立 class，彻底避开 app.css 里两套 .switch 规则互相覆盖 ────── */
+/* iOS 原生 UISwitch：51×31 轨道 + 27px 白滑块 + 品牌色开启 + 平滑位移 */
+.ios-toggle {
+  position: relative; flex: none; display: inline-block;
+  width: 51px; height: 31px; padding: 0; border: 0; border-radius: 999px;
+  background: rgba(120, 120, 128, .32); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .22s ease;
+}
+.ios-toggle input {
+  position: absolute; inset: 0; z-index: 2;
+  width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;
+}
+.ios-toggle i {
+  position: absolute; inset: 0; width: auto; height: auto;
+  border: 0; border-radius: 999px; background: transparent; pointer-events: none;
+  transition: background .22s ease;
+}
+.ios-toggle i::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 27px; height: 27px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  transition: transform .22s cubic-bezier(.3, .9, .4, 1);
+}
+.ios-toggle input:checked + i { background: var(--brand); }
+.ios-toggle input:checked + i::after { transform: translateX(20px); }
+.ios-toggle input:focus-visible + i { outline: 2px solid var(--brand); outline-offset: 2px; }
+.ios-setpage .set-row .ios-toggle { align-self: center; }
+
+/* 自建歌单头部「导入歌单」入口（替代原来的加号） */
+.ios-plhead-tools .ios-plimport {
+  height: 30px; padding: 0 12px; border: 0; border-radius: 15px;
+  background: var(--card); color: var(--brand);
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  display: inline-flex; align-items: center;
+}
+.ios-plhead-tools .ios-plimport:active { opacity: .75; }
+
+/* 导入弹层：必须盖住 iOS 播放页（z-index 40），并做成底部卡片 */
+[data-platform="ios"] #importSheet {
+  position: fixed; inset: 0; z-index: 260;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, .62);
+}
+[data-platform="ios"] #importSheet[hidden] { display: none !important; }
+[data-platform="ios"] #importSheet .sheet-card {
+  width: 100%; max-width: 460px; max-height: 78vh; overflow: auto;
+  box-sizing: border-box; padding: 20px;
+  border-radius: 22px; background: var(--bg-2); color: var(--ink);
+}
+[data-platform="ios"] #importSheet .hint { color: var(--ink-3); font-size: 12px; line-height: 1.6; }
+[data-platform="ios"] #importSheet .field {
+  width: 100%; min-height: 96px; box-sizing: border-box;
+  background: var(--card); color: var(--ink); border: 0; border-radius: 12px;
+  padding: 12px; font-size: 13px;
+}
+
+/* 播放失败时反复点播放/暂停：封面不允许任何动效 / 位移 */
+.now-playing .np-cover, .now-playing .np-cover img {
+  animation: none !important; transition: none !important;
+}
+
+/* ── 播放队列：当前正在播放的曲目必须明显高亮 ────────────────────────── */
+/* 旧规则把 .on 行设成透明背景、标题仍是普通墨色，等于没高亮 */
+.ios-q-row.on {
+  background: rgba(250, 36, 60, .13);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.ios-q-row.on .ios-q-meta b { color: var(--brand); font-weight: 700; }
+.ios-q-row.on .ios-q-meta i { color: var(--brand); opacity: .88; }
+.ios-q-row.on .ios-q-cv { box-shadow: 0 0 0 1.5px rgba(250, 36, 60, .55); }
+.ios-q-nowdot {
+  display: inline-block; width: 6px; height: 6px; margin-right: 5px;
+  border-radius: 50%; background: var(--brand); vertical-align: middle;
+}
+
+/* ── 设置页「音频诊断」输出：等宽纯文本，真机截图可读 ─────────────────── */
+.audio-diag {
+  margin: 0 14px 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-2, #f2f2f7); color: var(--ink-2, #3c3c43);
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere;
+}
+.audio-diag[hidden] { display: none !important; }
