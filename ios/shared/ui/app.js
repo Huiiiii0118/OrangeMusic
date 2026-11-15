@@ -177,6 +177,8 @@ const S = {
   // 子页面：null | { kind:'list', title, sub, cover, tracks, from, loading, source }
   page: null,
   queue: [], queueFrom: null, current: null, positionMs: 0, playing: false, mode: 'list', npqPick: new Set(),
+  // 播放历史（栈，末尾最近）：随机模式的「上一首」据此回到上一首播放过的歌，而不是随机跳
+  playHistory: [],
   device: 'browser', session: null, identity: {}, cloud: null, core: null,
   searchResults: [], favorites: [], recent: [], playlists: [], recommend: null, trialList: { id: 'trial-list', name: '试听列表', items: readTrialItems(), source: { type: 'trial' } },
   profile: null, profileTab: 'like',
@@ -1102,11 +1104,13 @@ function showCloseDialog() {
   setTimeout(() => wrap.querySelector('[data-close="tray"]')?.focus(), 40)
 }
 
-function openRowMoreMenu(anchor, key) {
+function openRowMoreMenu(anchor, key, opt = {}) {
   const t = findTrack(key); const liked = S.favorites.some((x) => x.key === key)
   const inPl = S.page?.source?.type === 'playlist'
-  // 删除只保留在自建歌单页；推荐歌单 / 收藏歌单 / 喜欢等列表不再提供「删除」
-  const removable = inPl
+  // 播放列表头部三点走 queue 模式：「删除」= 从播放队列移除；
+  // 列表行沿用「从当前所在列表移除」的原语义。
+  const removable = inPl || !!opt.queue
+  const removeFn = opt.queue ? () => iosRemoveFromQueue(key) : () => removeFromContext(key)
   const addSub = [
     ...S.playlists.map((p) => ({ label: `${p.name}（${p.tracks?.length || 0} 首）`, onClick: () => mergeIntoPlaylist(p, [key]) })),
     { sep: true },
@@ -1127,16 +1131,23 @@ function openRowMoreMenu(anchor, key) {
         },
       }))
     : []
+  // 「播放」「下一首播放」按需求移除：点列表行本身就会播放，菜单里这两项重复。
+  // 剩下 5 项：播放相似单曲 / 我喜欢 / 添加到 / 移动到 / 删除。
   openCtxMenu(anchor, [
-    { label: '播放', icon: MI.play, onClick: () => t && playTrack(t) },
-    { label: '下一首播放', icon: MI.next, onClick: () => playNextOf(key) },
     { label: '播放相似单曲', icon: MI.similar, onClick: () => playSimilarOf(t) },
     { sep: true },
     { label: '我喜欢', icon: liked ? MI.heartOn : MI.heart, onClick: () => toggleLikeKey(key) },
     { label: '添加到', icon: MI.add, arrow: true, sub: addSub },
     { label: '移动到', icon: MI.move, arrow: true, disabled: !inPl || !moveSub.length, sub: moveSub },
-    ...(removable ? [{ sep: true }, { label: '删除', icon: MI.trash, danger: true, onClick: () => removeFromContext(key) }] : []),
+    ...(removable ? [{ sep: true }, { label: '删除', icon: MI.trash, danger: true, onClick: removeFn }] : []),
   ])
+}
+
+// 播放列表三点菜单里的「删除」：从队列移除该曲，不打断正在播放的音频。
+function iosRemoveFromQueue(key) {
+  S.queue = (S.queue || []).filter((x) => x.key !== key)
+  try { iosSheetHide(); iosRenderNav() } catch { /* 页面未就绪时忽略 */ }
+  toast('已从播放列表移除')
 }
 
 // 从当前所在列表移除歌曲：歌单详情页 → 从歌单删；「我喜欢」页 → 从收藏删；其他列表不支持。
@@ -2318,9 +2329,6 @@ function iosSeedStationCovers() {
   S.iosStnCover = map
 }
 
-// dock 中央胶囊的外圈进度环：周长按 176×52、圆角 26 算好，写死比每次量 DOM 稳。
-const DOCK_RING_PERIMETER = 2 * (176 + 52) - 8 * 26 + 2 * Math.PI * 26
-
 function iosRenderNav() {
   const inPlayer = iosNowPlayingOpen()
   const drawer = iosDrawerOpen()
@@ -2340,12 +2348,6 @@ function iosRenderNav() {
       </button>`
   } else {
     center = `<button class="ios-dock-play" data-ios-toggle aria-label="${S.playing ? '暂停' : '播放'}">
-        <svg class="dock-ring" viewBox="0 0 180 56" preserveAspectRatio="none" aria-hidden="true">
-          <rect class="dock-ring-bg" x="2" y="2" width="176" height="52" rx="26" vector-effect="non-scaling-stroke"></rect>
-          <rect class="dock-ring-fg" id="dockRingFg" x="2" y="2" width="176" height="52" rx="26" vector-effect="non-scaling-stroke"
-                stroke-dasharray="${DOCK_RING_PERIMETER.toFixed(1)}"
-                stroke-dashoffset="${DOCK_RING_PERIMETER.toFixed(1)}"></rect>
-        </svg>
         <span class="dock-ico">${S.playing ? IOS_PAUSE_LG : IOS_PLAY_LG}</span>
       </button>`
   }
@@ -2358,7 +2360,6 @@ function iosRenderNav() {
   const bar = $('#tabbar')
   if (bar) bar.classList.toggle('in-player', inPlayer)
   if (inMusic && t) iosInitDockNpMarquee()
-  iosPaintDockRing()
 }
 
 // Music / 乐库 分页页里的「当前播放」小卡：文字过长时左右滚动显示（前后滚动）。
@@ -2454,17 +2455,6 @@ function iosPaintLyricSung(pos) {
   const end = Number(lines[i + 1]?.time) || (start + 4000)
   const p = Math.max(0, Math.min(1, (pos - start) / Math.max(400, end - start)))
   iosSetSung(on, p * 100, `np|${S.lyrics?.key}|${i}`)
-}
-
-// 把播放进度画到 dock 胶囊外圈
-function iosPaintDockRing() {
-  const fg = document.getElementById('dockRingFg')
-  if (!fg) return
-  const a = $('#previewAudio')
-  const dur = Number(S.current?.durationMs) || (a && isFinite(a.duration) ? a.duration * 1000 : 0) || 0
-  const pos = Number(S.positionMs) || 0
-  const p = dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0
-  fg.setAttribute('stroke-dashoffset', String(DOCK_RING_PERIMETER * (1 - p)))
 }
 
 // ── 歌词详情页（点击播放页歌词区进入）──────────────
@@ -2886,7 +2876,7 @@ function iosQueueSheetHtml() {
       <b>播放列表</b>
       <span class="ios-q-head-tools">
         <button class="ios-mode-btn" data-ios-mode aria-label="播放模式：${esc(iosModeLabel())}" title="${esc(iosModeLabel())}">${iosModeIcon()}</button>
-        <button data-ios-sheet-close aria-label="收起">${IOS_IC.more}</button>
+        <button data-ios-qmore aria-label="更多">${IOS_IC.more}</button>
       </span>
     </div>
     <div class="ios-q-list">${rows.map((x) => {
@@ -2911,6 +2901,10 @@ function iosQualityIcon() {
 // 播放模式：顺序 / 单曲循环 / 随机（默认顺序，选择跟随记录）
 function iosModeLabel() {
   return S.mode === 'single' ? '单曲循环' : S.mode === 'shuffle' ? '随机播放' : '顺序播放'
+}
+// 工具行圆形按钮下的短标签（与「添加到 / 定时 / 音质 / 倍速」同款，字数要短）
+function iosModeShortLabel() {
+  return S.mode === 'single' ? '单曲' : S.mode === 'shuffle' ? '随机' : '顺序'
 }
 function iosModeIcon() {
   const d = S.mode === 'single'
@@ -2945,13 +2939,13 @@ function iosMoreSheetHtml() {
     <div class="ios-more-head">
       <span class="ios-more-cv">${t ? coverHtml(t) : '<span class="ios-ent-ph">♪</span>'}</span>
       <span class="ios-more-meta"><b>${esc(t?.title || '还没有播放')}</b><i>${esc(t?.artist || '')}</i></span>
-      <button class="ios-more-shuffle ios-mode-btn" data-ios-mode aria-label="播放模式：${esc(iosModeLabel())}" title="${esc(iosModeLabel())}">${iosModeIcon()}</button>
     </div>
     <div class="ios-more-tools">
       <button class="ios-mt" data-ios-mt="add"><span>${IOS_IC.plus}</span><i>添加到</i></button>
       <button class="ios-mt" data-ios-mt="timer"><span><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.4a8 8 0 1 0 0-16 8 8 0 0 0 0 16"/><path d="M12 8v4.6l3 1.8"/></svg></span><i>定时</i></button>
       <button class="ios-mt" data-ios-mt="quality"><span><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.4 8.4 9l3.4 5 2.6-3.4 5.6 5.8"/></svg></span><i>音质</i></button>
       <button class="ios-mt" data-ios-mt="speed"><span><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.4a8 8 0 1 1 14 0"/><path d="M12 12l4-3"/></svg></span><i>倍速</i></button>
+      <button class="ios-mt" data-ios-mode aria-label="播放模式：${esc(iosModeLabel())}" title="${esc(iosModeLabel())}"><span>${iosModeIcon()}</span><i>${esc(iosModeShortLabel())}</i></button>
     </div>
     <div class="ios-more-rows">${rows.map(([k, label, val]) => `
       <button class="ios-mrow" data-ios-row="${k}">
@@ -3134,8 +3128,11 @@ function iosSyncNp() {
   const lk = $('#iosNpLikeCount')
   if (lk) {
     const on = !!(t && (S.favorites || []).some((x) => x.key === t.key))
-    lk.textContent = on ? '已喜欢' : '喜欢'
+    // 文案恒定「喜欢」；已喜欢时把爱心填成实心（颜色由 .np-ios-act.on 的品牌色提供），
+    // 未喜欢时保持空心，不再出现「已喜欢」三个字。
+    lk.textContent = '喜欢'
     $('#iosNpLike')?.classList.toggle('on', on)
+    $('#iosNpLikeIcon')?.setAttribute('fill', on ? 'currentColor' : 'none')
   }
   // 播放页不再显示「自动音质」小字；音质仍可在操作行切换。
   const hint = $('#iosNpHint')
@@ -3477,6 +3474,14 @@ document.addEventListener('click', (e) => {
       if (!t.streams?.length) { try { S.core?.sources?.applyPrefetched?.(t) } catch { /* 无预取 */ } }
       playTrack(t)
     }
+    return
+  }
+  // 播放列表头部三点：对当前播放曲目弹出 5 项菜单（不再是「收起」）。
+  const qmore = q('[data-ios-qmore]')
+  if (qmore) {
+    const key = S.current?.key
+    if (!key) return toast('还没有播放的歌曲')
+    openRowMoreMenu(qmore, key, { queue: true })
     return
   }
   const del = q('[data-ios-qdel]')
@@ -4869,7 +4874,7 @@ const rowToTrack = (r) => makeTrack({
 })
 
 // ---- 设置 ----
-const APP_VERSION = '1.0.0'
+const APP_VERSION = '1.1.0'
 const fmtBytes = (n) => (n > 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
 const lsSize = () => {
   try { return Object.keys(localStorage).reduce((n, k) => n + k.length + (localStorage.getItem(k) || '').length, 0) } catch { return 0 }
@@ -5923,6 +5928,9 @@ async function runSearch(q, stay = false) {
         iosApi(`/api/search/playlist?q=${encodeURIComponent(q)}&limit=20`, 3 * 60 * 1000),
       ])
       S.searchPlaylists = (sp?.list || []).filter((x) => x.id && x.name)
+      // 借鉴 Windows 搜索链路：服务端已并行聚合网易云 + 酷我 + 酷狗，
+      // 酷狗正式版覆盖率高（叹云兮 / 恋爱告急 / 壁上观等），所以这里恢复统一过滤：
+      // 「只听正式发行版」删 Live / DJ / 片段，同名限流保留原版优先。
       const rows = iosNormList(j?.list || [])
         // 只收「真的是歌」的行：必须有歌手，时长不为 0 时要像一首歌
         .filter((x) => String(x.artist || '').trim() && (Number(x.durationMs) === 0 || Number(x.durationMs) > 45000))
@@ -6160,7 +6168,9 @@ function failAndNext(t, msg) {
   }
   skipGuard++
   toast(PLAY_FAIL, true)
-  setTimeout(() => { playTrack(nextOne, 0, { auto: true }).catch(() => {}) }, 20)
+  // skipHistory：失败跳过的这一首不算「播放过」，不能进历史栈（否则随机模式的
+  // 「上一首」会退到死链上再触发一轮失败连跳）。
+  setTimeout(() => { playTrack(nextOne, 0, { auto: true, skipHistory: true }).catch(() => {}) }, 20)
 }
 // 自动跳歌的连续计数（成功起播即清零）
 let autoSkipChain = 0
@@ -6236,13 +6246,22 @@ async function playTrack(t, pos = 0, opts = {}) {
   const needResolve = (!t.streams?.length || staleStreams) && !!(t.pending || t.title)
   const resolveViaSearch = !t.pending && needResolve
   const switchingTo = t.key
-  const prevKey = S.current?.key
+  const prevTrack = S.current
+  const prevKey = prevTrack?.key
   S.current = t
   S.positionMs = pos
   // 切到不同歌曲时，立刻停掉上一首：否则在「解析 / 取链」那几秒里，
   // 界面已经切到新歌、耳朵里还是上一首（用户反馈的「切了歌还播原来的」）。
   // 同一首（比如重试 / 单曲循环）不动它，避免刚暂停又被自己重启。
   if (!prevKey || prevKey !== switchingTo) {
+    // 播放历史：离场曲目入栈，随机模式「上一首」据此回退。
+    // opts.fromHistory（从历史返回）不再入栈，否则退一首又被推回来，永远退不回去；
+    // opts.skipHistory（取链失败后的自动跳曲）同样不入栈 —— 那些歌根本没播出来，
+    // 混进历史会让「上一首」跳到一堆听不了的死链上。
+    if (prevTrack && !opts.fromHistory && !opts.skipHistory) {
+      S.playHistory.push(prevTrack)
+      if (S.playHistory.length > 80) S.playHistory.shift()
+    }
     try {
       const a = document.getElementById('previewAudio')
       if (a) {
@@ -6557,7 +6576,6 @@ function renderProgress() {
   // 精简模式封面外圈的环形进度（r=57 → 周长 358.1）
   const ring = $('#miniRing')
   if (ring) ring.style.strokeDashoffset = String((358.1 * (1 - Math.min(1, pct / 1000))).toFixed(1))
-  if (IS_IOS) { try { iosPaintDockRing() } catch { /* 抽屉未挂载时忽略 */ } }
   highlightLyric(pos)
   if (IS_IOS) { try { syncLockScreenLyric(pos) } catch { /* 锁屏歌词不可用 */ } }
   if (IS_IOS) { try { iosPaintLyricSung(pos) } catch { /* 歌词未就绪 */ } }
@@ -7855,7 +7873,11 @@ function bindStatic() {
     if (!S.current || S.lyrics.lines.length || S.lyrics.text) return
     loadLyricsFor(S.current, true)
   }
-  bindLyricDrag()
+  // iOS：歌词只用于浏览（原生触摸滚动），不允许按住拖动来定位播放进度。
+  // bindLyricDrag() 是桌面端「按住左键上下拖歌词 → 松手 seek 到该时间」的鼠标交互，
+  // 在真机上会被 touch 的 pointer 事件一起触发，导致随手翻歌词就跳进度。
+  // Windows 端保留原行为；歌词页的进度条 / 点击歌词行定位不受影响（那是独立控件）。
+  if (!IS_IOS) bindLyricDrag()
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && S.page) back()
   })
@@ -7984,6 +8006,17 @@ function nextInQueue(i, dir, auto) {
   if (!S.queue.length) return
   let j
   if (S.mode === 'shuffle') {
+    if (dir < 0) {
+      // 随机模式的「上一首」= 回到上一首播放过的歌（播放历史后进先出），不是随机跳。
+      let prev = null
+      while (S.playHistory.length) {
+        const cand = S.playHistory.pop()
+        if (cand && cand.key !== S.current?.key) { prev = cand; break }
+      }
+      if (prev) { playTrack(prev, 0, { fromHistory: true }); return }
+      // 历史用完了（本会话第一首）：回到当前曲开头，与常见播放器一致
+      if (S.current) { S.positionMs = 0; playTrack(S.current, 0, { fromHistory: true }); return }
+    }
     // 随机：尽量不和当前这首重复
     j = S.queue.length > 1 ? Math.floor(Math.random() * (S.queue.length - 1)) : 0
     if (i >= 0 && j >= i) j += 1

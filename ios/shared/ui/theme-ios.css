@@ -19,9 +19,11 @@
   --gold: #e6bd7d;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  /* 页头基准高度：以「听你想听」页头像圈顶部为准（safe-t + 20px）。
-     fixed 页面用 calc(var(--safe-t) + 20px)；流内页面因 .window 已含 safe-t，直接用 20px。 */
-  --ios-head-top: 20px;
+  /* 安全区之下的统一「呼吸间距」。全屏 PWA 状态栏是透明的，内容必须等
+     env(safe-area-inset-top) 之后才开始；这 8px 只是标题与状态栏的视觉间距：
+     太小会贴着灵动岛显得压抑，太大（此前的 20px 基准）又会让顶部空旷。
+     所有页头一律只用这一个值，禁止在子元素里再叠一份 safe-t。 */
+  --ios-top-gap: 8px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -37,6 +39,13 @@
   --line: rgba(255, 255, 255, .08);
 }
 
+/* 个别 WebKit 版本在 black-translucent 下会把 inset 报成 0；全屏启动时
+   至少留够状态栏高度，避免灵动岛 / 刘海压住标题。只作用于触屏 standalone，
+   普通 Safari 标签页与桌面预览不受影响，不会产生额外空白。 */
+@media (display-mode: standalone) and (pointer: coarse) {
+  :root { --safe-t: max(env(safe-area-inset-top, 0px), 44px); }
+}
+
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 body {
   color: var(--ink);
@@ -49,6 +58,8 @@ body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh; max-height: 100dvh;
+  /* 流内页面（Music/乐库、设置、关于、搜索、我的…）的安全区统一由这里承担；
+     内部页头只再补 --ios-top-gap，避免双重 padding 把标题推低、顶部显空。 */
   padding-top: var(--safe-t);
   overflow: hidden;
   background: var(--bg);
@@ -80,7 +91,8 @@ body {
 .ios-dock-key.on { color: var(--brand); }
 /* 播放队列键的未读红点已按需求移除：保留规则做兜底，任何遗留 DOM 都不再显示 */
 .ios-dock-badge { display: none !important; }
-/* 中央胶囊：外圈就是播放进度环；比两侧的圆形键更高更宽，三键整体等高 */
+/* 中央胶囊：比两侧的圆形键更高更宽，三键整体等高。
+   外圈进度环已按需求移除，胶囊只保留纯底色 + 播放/暂停图标。 */
 .ios-dock-play {
   position: relative; flex: none;
   width: 176px; height: 56px;
@@ -89,9 +101,6 @@ body {
   display: grid; place-items: center;
 }
 .ios-dock-play:active { transform: scale(.985); }
-.dock-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.dock-ring-bg { fill: none; stroke: rgba(255, 255, 255, .10); stroke-width: 2; }
-.dock-ring-fg { fill: none; stroke: var(--brand); stroke-width: 2.4; stroke-linecap: round; transition: stroke-dashoffset .3s linear; }
 .dock-ico { position: relative; z-index: 1; display: grid; place-items: center; color: #fff; }
 @media (max-width: 360px) {
   .ios-dock-play { width: 158px; }
@@ -102,7 +111,8 @@ body {
   position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
   display: block;
   width: 87%; max-width: 348px;
-  padding: calc(var(--safe-t) + 10px) 18px calc(var(--dock-h) + 26px + var(--safe-b));
+  /* fixed 层：只负责安全区，8px 呼吸间距交给内部 .ios-head */
+  padding: var(--safe-t) 18px calc(var(--dock-h) + 26px + var(--safe-b));
   overflow-y: auto; overflow-x: hidden;
   background: var(--bg);
   transform: translateX(-102%);
@@ -130,11 +140,8 @@ body {
 }
 .ios-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0 14px;
+  padding: var(--ios-top-gap) 0 14px;
 }
-/* 流内页面的页头（我的 / 我的音乐子页）对齐「听你想听」基准；
-   听你想听自身在抽屉里（.ios-drawer，非 .ios-page），不受影响。 */
-.ios-page > .ios-head { padding-top: var(--ios-head-top); }
 .ios-head h1 {
   margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -1.1px; color: var(--ink);
 }
@@ -358,7 +365,8 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: none;
   align-content: stretch;
-  padding: calc(var(--safe-t) + var(--ios-head-top)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
@@ -490,28 +498,11 @@ body {
 .np-ios-act.only { color: rgba(255, 255, 255, .78); }
 .np-ios-actions-gap { flex: 1; }
 
-/* 进度 */
+/* 进度：按需求 iOS 不显示任何可见播放进度条（播放页底部细条 + dock 外圈进度环）。
+   DOM 保留给 Windows 与拖动/进度逻辑共用，只在 iOS 主题里整个隐藏。 */
 .np-bar { flex: none; padding-top: 4px; background: transparent; }
-.np-progress { display: flex; align-items: center; gap: 10px; }
-#npCurTime, #npTotalTime { display: none !important; }
-.np-progress input[type="range"] {
-  flex: 1; min-width: 0; height: 3px; border-radius: 999px;
-  appearance: none; -webkit-appearance: none;
-  background: linear-gradient(90deg, #fff 0 var(--p, 0%), rgba(255, 255, 255, .24) var(--p, 0%));
-}
-.np-progress input[type="range"]::-webkit-slider-thumb {
-  appearance: none; -webkit-appearance: none;
-  width: 10px; height: 10px; border-radius: 50%; background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
-  /* 平时不显示：进度为 0 时这颗白点会孤零零挂在「喜欢」下面（用户反馈的小点），
-     按住进度条拖动时才出现，拖动反馈不受影响。 */
-  opacity: 0; transition: opacity .15s var(--ease, ease);
-}
-.np-progress input[type="range"]:active::-webkit-slider-thumb,
-.np-progress input[type="range"]:focus-visible::-webkit-slider-thumb,
-.np-progress input[type="range"].dragging::-webkit-slider-thumb { opacity: 1; }
-/* 播放页不再显示「自动音质」小字（用户要求删除） */
-.np-ios-hint { display: none !important; }
+.np-progress { display: none !important; }
+#npCurTime, #npTotalTime, .np-ios-hint { display: none !important; }
 
 /* 账号操作条（我的页） */
 .ios-account-bar { display: flex; gap: 10px; margin-top: 12px; }
@@ -532,7 +523,9 @@ body {
 }
 .ios-sheet[hidden] { display: none; }
 .ios-sheet-card {
-  width: 100%; max-height: 86dvh;
+  width: 100%;
+  /* 队列很长时也不越过状态栏 / 灵动岛安全区 */
+  max-height: min(86dvh, calc(100dvh - var(--safe-t) - var(--ios-top-gap)));
   display: flex; flex-direction: column;
   border-radius: 22px 22px 0 0; overflow: hidden;
   background: var(--bg-2);
@@ -606,11 +599,7 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ios-more-meta i { display: block; margin-top: 4px; font-size: 11.5px; font-style: normal; color: var(--ink-3); }
-.ios-more-shuffle {
-  flex: none; height: 30px; padding: 0 12px; border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, .16); background: transparent;
-  color: var(--ink-2); font-size: 11.5px; display: inline-flex; align-items: center; gap: 5px;
-}
+/* 播放模式已移到下方工具行，成为第 5 个同款圆形按钮（顺序 / 单曲 / 随机）。 */
 .ios-more-tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px 14px 14px; flex: none; }
 .ios-mt { border: 0; background: transparent; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .ios-mt span {
@@ -654,11 +643,11 @@ body {
 
 /* ── iOS 设置页：适配手机宽度 + 深色控件 ─────── */
 .ios-setpage {
-  /* 顶部间距交给 .ios-mtabs（--ios-head-top 基准）；这里不再自带 safe-t，
-     否则会和 .window 的 safe-t 叠成双份（刘海机上顶部空白翻倍）。 */
+  /* 顶部完全交给 .ios-mtabs（--ios-top-gap）。容器再带 safe-t 或额外 padding
+     都会和 .window 的安全区叠加，刘海机上出现一整条空白。 */
   padding: 0 18px calc(var(--dock-h) + 44px + var(--safe-b));
 }
-.ios-setpage .ios-head { padding: 4px 0 10px; }
+.ios-setpage .ios-head { padding: var(--ios-top-gap) 0 10px; }
 .ios-setpage .ios-head h1 { font-size: 26px; }
 .ios-setpage .set-group { max-width: none; padding: 14px 0 2px; border-top: 1px solid var(--line); }
 .ios-setpage .set-group:first-of-type { border-top: 0; padding-top: 0; }
@@ -711,8 +700,7 @@ body {
 /* ── Music 页顶部 tabs ───────────────────── */
 .ios-mtabs {
   display: flex; align-items: center; gap: 16px;
-  /* 顶部基准与「听你想听」页头像圈对齐（原 8px 太贴状态栏） */
-  padding: var(--ios-head-top) 0 14px;
+  padding: var(--ios-top-gap) 0 14px;
 }
 .ios-mback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
@@ -802,7 +790,7 @@ body {
 .ios-lib-empty .btn { margin-top: 6px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: var(--brand); color: #fff; }
 
 /* ── 搜索页 ─────────────────────────────── */
-.ios-search-head { display: flex; align-items: center; gap: 10px; padding: var(--ios-head-top) 0 12px; }
+.ios-search-head { display: flex; align-items: center; gap: 10px; padding: var(--ios-top-gap) 0 12px; }
 .ios-sback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
   background: transparent; color: var(--ink-2); font-size: 20px; line-height: 1; padding: 0 0 4px;
@@ -864,7 +852,8 @@ body {
 .ios-lyrics-page {
   position: fixed; inset: 0; z-index: 210;
   display: flex; flex-direction: column;
-  padding: calc(var(--safe-t) + var(--ios-head-top)) var(--pad) calc(14px + var(--safe-b));
+  /* 歌词页同为 fixed 全屏层，与播放页同一套顶部基准 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) var(--pad) calc(14px + var(--safe-b));
   background: linear-gradient(180deg, #16233a 0%, #0f1116 62%, #0b0c10 100%);
   transform: translateY(12px); opacity: 0; pointer-events: none;
   transition: transform .22s ease, opacity .22s ease;
@@ -888,11 +877,11 @@ body {
   scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
 .ly-body::-webkit-scrollbar { display: none; }
-.ly-row { margin: 16px 0; transition: opacity .2s ease; opacity: .42; }
+.ly-row { margin: 24px 0; transition: opacity .2s ease; opacity: .42; }
 .ly-row.on { opacity: 1; }
 .ly-main {
-  margin: 0; font-size: 20px; line-height: 1.45; font-weight: 700;
-  color: #fff; letter-spacing: -.2px;
+  margin: 0; font-size: 20px; line-height: 1.6; font-weight: 700;
+  color: #fff; letter-spacing: 0;
 }
 .ly-row.on .ly-main {
   color: transparent;
@@ -900,7 +889,7 @@ body {
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   transition: --sung .22s linear;
 }
-.ly-tr { margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: rgba(255, 255, 255, .58); font-weight: 500; }
+.ly-tr { margin: 8px 0 0; font-size: 13.5px; line-height: 1.55; color: rgba(255, 255, 255, .58); font-weight: 500; }
 .ly-empty { padding: 40px 0; text-align: center; color: var(--ink-3); font-size: 13px; white-space: pre-line; }
 .ly-bar { display: flex; align-items: center; gap: 18px; flex: none; padding-top: 8px; }
 .ly-btn {
@@ -1004,9 +993,11 @@ body {
 .ly-ctl .ly-btn.play { width: 54px; height: 54px; background: rgba(255, 255, 255, .06); }
 .ly-bar { padding-top: 10px; }
 .ly-body { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 74%, transparent 98%); mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 74%, transparent 98%); }
-.ly-row { margin: 13px 0; }
-.ly-main { font-size: 19px; line-height: 1.4; }
-.ly-tr { font-size: 13px; margin-top: 5px; }
+/* 行距：行与行之间 24px 呼吸（margin 会折叠，实际间距 = 24px）；
+   line-height 1.6 让折行（如「…温暖了我 / 指尖」）不再黏在一起；字距归零。 */
+.ly-row { margin: 24px 0; }
+.ly-main { font-size: 19px; line-height: 1.6; letter-spacing: 0; }
+.ly-tr { font-size: 13px; margin-top: 8px; }
 
 /* 抽屉里的 Music / 乐库 入口 */
 .ios-drawer-entry { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }

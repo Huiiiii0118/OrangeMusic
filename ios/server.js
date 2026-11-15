@@ -852,6 +852,42 @@ async function proxyGet(target, referer) {
   }
 }
 
+// ── 本地测试专用：iPhone 机型模拟器 ─────────────────
+// 只在「本机 / 局域网访问 + 显式带 __sim=1」时生效；正式云端一律不改写。
+// 模拟器把测试版页面放进 iframe，需要两件事：
+//   1) 放宽 index.html meta 里的 frame-ancestors（仅本地，且只放宽到 'self'）；
+//   2) 把真机安全区数值作为「同源外部样式表」注入 —— 页面 CSP 是 style-src 'self'，
+//      内联 <style> 会被整条丢弃，只有同源 <link> 能覆盖 :root 的 --safe-t/--safe-b。
+// 模拟器页面本身放在 ios/test/ 下，不进 www、不进部署产物。
+const isLocalHost = (h) => /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/i.test(String(h || ''))
+
+function iphonePreviewFile() {
+  // 本地从 ios/www/server.js 启动时 ROOT=www → ../test/；
+  // 直接从 ios/server.js 启动时 ROOT=ios → ./test/。
+  for (const f of [path.join(ROOT, '..', 'test', 'iphone.html'), path.join(ROOT, 'test', 'iphone.html')]) {
+    try { if (fs.statSync(f).isFile()) return f } catch { /* ignore */ }
+  }
+  return ''
+}
+
+function simIndex(res, url) {
+  let html
+  try { html = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8') } catch { return false }
+  const top = Math.max(0, Math.min(120, Number(url.searchParams.get('__top')) || 0))
+  const bot = Math.max(0, Math.min(80, Number(url.searchParams.get('__bot')) || 0))
+  html = html
+    .replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+    .replace('</head>', `<link id="__iphoneSimCss" rel="stylesheet" href="/__iphone.css?top=${top}&bottom=${bot}">\n</head>`)
+  const buf = Buffer.from(html, 'utf8')
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': buf.length,
+    'Cache-Control': 'no-store, must-revalidate',
+  })
+  res.end(buf)
+  return true
+}
+
 // ── 静态资源 ─────────────────────────────────────
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname)
@@ -875,6 +911,32 @@ function serveStatic(req, res, pathname) {
   return true
 }
 
+// 搜索专用酷狗源：与 Windows 端共用同一份引擎（songsearch.kugou.com）。
+// 上面取链兜底那个 kgSearch() 走的是 msearchcdn，本机连不上；这里不动它，
+// 另起一路 V2 —— 实测搜「鞠婧祎」能拿到叹云兮 / 恋爱告急 / 壁上观等正式版，
+// 正好补上「网易云被风控 + 酷我全是 Live/DJ」的缺口。
+// 逻辑与 shared/core/engine/OrangeKugou.js 的 search 一致，但内联在这里：
+// 源文件跑在 ios/server.js、产物跑在 www/server.js，两者相对引擎的路径不同，import 会失败。
+async function kgSearchV2(q, limit = 30) {
+  try {
+    const u = 'https://songsearch.kugou.com/song_search_v2'
+      + `?keyword=${encodeURIComponent(q)}&page=1&pagesize=${Math.min(limit, 30)}`
+      + '&platform=WebFilter&userid=0&clientver=2000&iscorrection=1&privilege_filter=0&filter=10'
+    const r = await req(u, { timeout: 12000 })
+    const j = await r.json()
+    const list = (j && j.data && j.data.lists) || []
+    return list.map((s) => ({
+      source: 'kg',
+      id: String(s.FileHash || ''),
+      title: String(s.SongName || '').replace(/<[^>]+>/g, ''),
+      artist: String(s.SingerName || '').replace(/<[^>]+>/g, ''),
+      album: String(s.AlbumName || ''),
+      cover: '',
+      durationMs: Math.round((Number(s.Duration) || 0) * 1000), // 酷狗 Duration 单位是秒
+    })).filter((x) => x.id && x.title)
+  } catch { return [] }
+}
+
 const json = (res, code, data) => {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -891,6 +953,24 @@ const server = http.createServer(async (r, res) => {
   if (r.method === 'OPTIONS') {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' })
     return res.end()
+  }
+  // 本地机型模拟器：页面 + 动态安全区样式 + 改写后的应用外壳。
+  // 云端没有 ios/test/ 目录，且 host 不是本机/局域网，三条路由都不会命中。
+  if (p === '/__iphone' || p === '/__iphone/') {
+    const f = isLocalHost(r.headers.host) ? iphonePreviewFile() : ''
+    if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Preview not available') }
+    const buf = fs.readFileSync(f)
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, must-revalidate' })
+    return res.end(buf)
+  }
+  if (p === '/__iphone.css' && isLocalHost(r.headers.host)) {
+    const top = Math.max(0, Math.min(120, Number(url.searchParams.get('top')) || 0))
+    const bot = Math.max(0, Math.min(80, Number(url.searchParams.get('bottom')) || 0))
+    res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' })
+    return res.end(`:root{--safe-t:${top}px !important;--safe-b:${bot}px !important;}`)
+  }
+  if ((p === '/' || p === '/index.html') && url.searchParams.get('__sim') === '1' && isLocalHost(r.headers.host)) {
+    if (simIndex(res, url)) return
   }
   if (!p.startsWith('/api/') && p !== '/health') {
     if (serveStatic(r, res, p)) return
@@ -921,23 +1001,23 @@ const server = http.createServer(async (r, res) => {
       const key = `s:${q}|${limit}`
       const hit = cget(key)
       if (hit) return json(res, 200, { q, list: hit, cached: true })
-      const [wy, kw] = await Promise.all([
+      const [wy, kw, kg] = await Promise.all([
         wySearch(q, limit).catch(() => []),
         kwSearch(q, limit).catch(() => []),
+        kgSearchV2(q, limit).catch(() => []),
       ])
       await wyFillCovers(wy)
-      const seen = new Set()
+      // 三源合并：酷狗正式版质量最高排前面；双重去重（平台 id + 歌名歌手），
+      // 避免同一首歌在酷我和酷狗各出现一次，占掉正式版的位置。
+      const seenId = new Set(), seenSong = new Set()
       const list = []
-      const maxLen = Math.max(wy.length, kw.length)
-      for (let i = 0; i < maxLen; i++) {
-        for (const arr of [kw, wy]) {
-          const x = arr[i]
-          if (!x) continue
-          const k = `${x.source}:${x.id}`
-          if (seen.has(k)) continue
-          seen.add(k)
-          list.push(x)
-        }
+      for (const x of [...kg, ...kw, ...wy]) {
+        const idk = `${x.source}:${x.id}`
+        if (seenId.has(idk)) continue
+        const song = `${norm(x.title)}|${norm(x.artist)}`
+        if (seenSong.has(song)) continue
+        seenId.add(idk); seenSong.add(song)
+        list.push(x)
       }
       return json(res, 200, { q, list: cset(key, list, 5 * 60 * 1000) })
     }

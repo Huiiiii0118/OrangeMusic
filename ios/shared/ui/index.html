@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Orange Music · 橙子音乐</title>
 <!-- iOS 网页版：Safari「添加到主屏幕」后全屏运行；Windows exe 复用同一份页面。 -->
-<meta name="theme-color" content="#f2660a">
+<!-- 全屏 PWA：状态栏透明覆盖在页面内容上，页面背景一直铺到屏幕顶端，顶部不留黑边。
+     theme-color 与页面深色底一致，避免启动/状态栏出现另一种颜色。 -->
+<meta name="theme-color" content="#0f1013">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="橙子音乐">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./icon.svg">
@@ -245,7 +247,7 @@
 
   <div class="np-ios-actions" id="iosNpActions">
     <button class="np-ios-act" id="iosNpLike" aria-label="喜欢">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2s-7.4-4.6-7.4-10A4.14 4.14 0 0 1 12 7.9a4.14 4.14 0 0 1 7.4 2.3c0 5.4-7.4 10-7.4 10z"/></svg>
+      <svg id="iosNpLikeIcon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2s-7.4-4.6-7.4-10A4.14 4.14 0 0 1 12 7.9a4.14 4.14 0 0 1 7.4 2.3c0 5.4-7.4 10-7.4 10z"/></svg>
       <span id="iosNpLikeCount">喜欢</span>
     </button>
     <span class="np-ios-actions-gap"></span>

@@ -186,6 +186,8 @@ const S = {
   // 子页面：null | { kind:'list', title, sub, cover, tracks, from, loading, source }
   page: null,
   queue: [], queueFrom: null, current: null, positionMs: 0, playing: false, mode: 'list', npqPick: new Set(),
+  // 播放历史（栈，末尾最近）：随机模式的「上一首」据此回到上一首播放过的歌，而不是随机跳
+  playHistory: [],
   device: 'browser', session: null, identity: {}, cloud: null, core: null,
   searchResults: [], favorites: [], recent: [], playlists: [], recommend: null, trialList: { id: 'trial-list', name: '试听列表', items: readTrialItems(), source: { type: 'trial' } },
   profile: null, profileTab: 'like',
@@ -5239,7 +5241,9 @@ function failAndNext(t, msg) {
   }
   skipGuard++
   toast(PLAY_FAIL, true)
-  setTimeout(() => { playTrack(nextOne, 0, { auto: true }).catch(() => {}) }, 20)
+  // skipHistory：失败跳过的这一首不算「播放过」，不能进历史栈（否则随机模式的
+  // 「上一首」会退到死链上再触发一轮失败连跳）。
+  setTimeout(() => { playTrack(nextOne, 0, { auto: true, skipHistory: true }).catch(() => {}) }, 20)
 }
 
 // 播放请求序号：快速连点下一首时，旧的那次可能还在等取链（几秒），
@@ -5254,8 +5258,19 @@ async function playTrack(t, pos = 0, opts = {}) {
   // 这类条目同样得先搜一次歌名，否则会被当成「没有音源」直接跳过。
   const needResolve = !t.streams?.length && !!(t.pending || t.title)
   const resolveViaSearch = !t.pending && !t.streams?.length
+  const switchingTo = t.key
+  const prevTrack = S.current
+  const prevKey = prevTrack?.key
   S.current = t
   S.positionMs = pos
+  // 播放历史：离场曲目入栈，随机模式「上一首」据此回退。
+  // opts.fromHistory（从历史返回）不再入栈，否则退一首又被推回来，永远退不回去；
+  // opts.skipHistory（取链失败后的自动跳曲）同样不入栈 —— 那些歌根本没播出来，
+  // 混进历史会让「上一首」跳到一堆听不了的死链上。
+  if (prevTrack && prevKey !== switchingTo && !opts.fromHistory && !opts.skipHistory) {
+    S.playHistory.push(prevTrack)
+    if (S.playHistory.length > 80) S.playHistory.shift()
+  }
   // 队列顺序必须保持「用户加入时的列表顺序」。以前这里把当前曲 unshift 到队头，
   // 于是 next() 永远在「当前曲 → 下一首 → 当前曲」之间来回切，后面的歌根本播不到。
   // 只在该曲确实不在队列时追加到末尾，绝不重排已有顺序。
@@ -6823,6 +6838,17 @@ function next(dir, { auto = false } = {}) {
   const i = S.queue.findIndex((t) => t.key === S.current?.key)
   let j
   if (S.mode === 'shuffle') {
+    if (dir < 0) {
+      // 随机模式的「上一首」= 回到上一首播放过的歌（播放历史后进先出），不是随机跳。
+      let prev = null
+      while (S.playHistory.length) {
+        const cand = S.playHistory.pop()
+        if (cand && cand.key !== S.current?.key) { prev = cand; break }
+      }
+      if (prev) { playTrack(prev, 0, { fromHistory: true }); return }
+      // 历史用完了（本会话第一首）：回到当前曲开头，与常见播放器一致
+      if (S.current) { S.positionMs = 0; playTrack(S.current, 0, { fromHistory: true }); return }
+    }
     // 随机：尽量不和当前这首重复
     j = S.queue.length > 1 ? Math.floor(Math.random() * (S.queue.length - 1)) : 0
     if (i >= 0 && j >= i) j += 1
