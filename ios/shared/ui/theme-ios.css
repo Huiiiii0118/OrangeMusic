@@ -20,10 +20,10 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   /* 安全区之下的统一「呼吸间距」。全屏 PWA 状态栏是透明的，内容必须等
-     env(safe-area-inset-top) 之后才开始；这 8px 只是标题与状态栏的视觉间距：
-     太小会贴着灵动岛显得压抑，太大（此前的 20px 基准）又会让顶部空旷。
+     env(safe-area-inset-top) 之后才开始。14px 是真机实测的平衡点：
+     8px 会让标题贴进状态栏毛玻璃区（显虚、发闷），20px 又让顶部空旷。
      所有页头一律只用这一个值，禁止在子元素里再叠一份 safe-t。 */
-  --ios-top-gap: 8px;
+  --ios-top-gap: 14px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -365,8 +365,9 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: none;
   align-content: stretch;
-  /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足 */
-  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足。
+     底部只留 dock 的净高：留多会把余量堆到操作行下方（真机反馈「底部剩下太多」）。 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 10px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
