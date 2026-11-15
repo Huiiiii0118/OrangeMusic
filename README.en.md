@@ -20,7 +20,7 @@
 | Install | Double-click to run. No registry writes, no services; delete the file to uninstall |
 | First launch | Extracts to `%LOCALAPPDATA%\OrangeMusic\app-<version>-<build>` (20–30 s, with splash); later launches 1–2 s |
 | User data | `%APPDATA%\橙子音乐` (survives upgrades) |
-| UI | **QQ Music style**: frameless, content fills the window, translucent sidebar, system blue `#0a84ff`, desktop player bar, thin scrollbars |
+| UI | Frameless, content fills the window, translucent sidebar, system blue `#0a84ff`, desktop player bar, thin scrollbars |
 | OS integration | Tray, configurable close behaviour (ask / minimize to tray / quit), launch at login, compact player mode, **global media keys** |
 | Music engine | **Runs entirely on the local machine**: resolves full audio by "title + artist" from Bodian / Kuwo, with NetEase unblocking, Kugou and QQ as fallbacks. No hosted service, no login, no membership |
 | Auto-update | Silent GitHub Releases check on start → orange dot on the About icon → "What's new" dialog after an upgrade |
