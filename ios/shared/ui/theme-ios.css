@@ -70,6 +70,14 @@
   }
 }
 
+/* Safari 标签页（display-mode: browser）：
+   浏览器有地址栏/工具栏，视口已经在它们下方，safe inset = 0。
+   把 safe-t/safe-b 归零，让内容贴着 Safari 视口边缘，标题紧贴顶部，三键贴底。
+   这样 Safari 下的布局与参考图一致：内容紧凑无多余间距。 */
+@media (display-mode: browser) {
+  :root { --safe-t: 0px; --safe-b: 0px; }
+}
+
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 body {
   color: var(--ink);
