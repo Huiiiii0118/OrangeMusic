@@ -371,8 +371,9 @@ body {
   grid-template-areas: none;
   align-content: stretch;
   /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足。
-     底部只留 dock 的净高：留多会把余量堆到操作行下方（真机反馈「底部剩下太多」）。 */
-  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 10px + var(--safe-b));
+     底部回到 19:20 前的 dock-h + 26px：操作按钮行落在绿框（用户标注的正确位置），
+     10px 会把功能行压得太低、贴住 dock，不符合旧版观感。 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
@@ -384,7 +385,9 @@ body {
   opacity: .95; transform: scale(1.06);
 }
 .np-wash {
-  position: absolute; inset: 0; z-index: 0;
+  /* ★ z-index 必须高于 .np-bg：np-bg 带 transform:scale() 会创建层叠上下文，
+     同为 z-index:0 时它反而盖在 wash 之上，导致顶部实色带被模糊封面吃掉 → 状态栏毛玻璃。 */
+  position: absolute; inset: 0; z-index: 1;
   /* 顶部安全区做成实色，盖住 np-bg 模糊封面上溢的颜色 —— 消除状态栏「毛玻璃」，
      让顶部与页面底色连成一体（对齐参考图）。实色带刚好覆盖 safe-t + 呼吸间距，
      机型不同（刘海 47 / 灵动岛 59~62）高度自动跟随，无需固定值。 */
@@ -397,7 +400,8 @@ body {
 }
 .np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
 .np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
-.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 1; }
+/* 内容层高于 np-wash(1)，保证半透明遮罩只作用于 np-bg、不遮住文字/按钮 */
+.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 2; }
 
 /* 顶部：菜单键 + 来源名 + VIP + 搜索 */
 .np-ios-top { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; }
