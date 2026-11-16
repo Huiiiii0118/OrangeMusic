@@ -19,10 +19,6 @@
   --gold: #e6bd7d;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  /* 安全区之下的统一「呼吸间距」。顶部不再靠固定值“顶开”，而是完全交给
-     env(safe-area-inset-top) —— 它按机型返回真实刘海/灵动岛高度，iPhone 13~18 全系
-     自动适配。这里只留很小的视觉留白，避免标题贴住状态栏文字。 */
-  --ios-top-gap: 4px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -38,18 +34,8 @@
   --line: rgba(255, 255, 255, .08);
 }
 
-/* 顶部安全区完全按机型自动适配：不做固定 44px 兜底。
-   black-translucent 下正确的 WebKit 会返回真实刘海/灵动岛高度（13 刘海 47 /
-   14~15 灵动岛 59 / 16~18 灵动岛 62），标题自然落在状态栏下方，既不被压住也不空旷。
-   —— 不再用 max(env,44) 硬兜底：那会让小屏也被顶出固定空白，无法按机型适配。 */
-
-/* Safari 普通标签页（有地址栏，非全屏）：浏览器已自己留出状态栏/地址栏，
-   但 viewport-fit=cover 仍会让 env(safe-t) 返回刘海高度，网页再留一段就变成
-   「顶部空一大截、不像全屏」。标签页里把安全区归零，内容贴着浏览器视口顶端铺满。
-   standalone（添加到主屏幕）不受此规则影响，仍按机型真实安全区适配。 */
-@media all and (display-mode: browser) {
-  :root { --safe-t: 0px; }
-}
+/* 顶部/底部边距回到 2026-11-15 19:20 前（v1.0.0 / 5f9737c）的基准：
+   不做机型硬兜底、不区分 browser / standalone、不加额外呼吸间距变量。 */
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 body {
@@ -63,8 +49,6 @@ body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh; max-height: 100dvh;
-  /* 流内页面（Music/乐库、设置、关于、搜索、我的…）的安全区统一由这里承担；
-     内部页头只再补 --ios-top-gap，避免双重 padding 把标题推低、顶部显空。 */
   padding-top: var(--safe-t);
   overflow: hidden;
   background: var(--bg);
@@ -116,8 +100,7 @@ body {
   position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
   display: block;
   width: 87%; max-width: 348px;
-  /* fixed 层：只负责安全区，8px 呼吸间距交给内部 .ios-head */
-  padding: var(--safe-t) 18px calc(var(--dock-h) + 26px + var(--safe-b));
+  padding: calc(var(--safe-t) + 10px) 18px calc(var(--dock-h) + 26px + var(--safe-b));
   overflow-y: auto; overflow-x: hidden;
   background: var(--bg);
   transform: translateX(-102%);
@@ -145,7 +128,7 @@ body {
 }
 .ios-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--ios-top-gap) 0 14px;
+  padding: 10px 0 14px;
 }
 .ios-head h1 {
   margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -1.1px; color: var(--ink);
@@ -370,10 +353,7 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: none;
   align-content: stretch;
-  /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足。
-     底部回到 19:20 前的 dock-h + 26px：操作按钮行落在绿框（用户标注的正确位置），
-     10px 会把功能行压得太低、贴住 dock，不符合旧版观感。 */
-  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  padding: calc(4px + var(--safe-t)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
@@ -385,23 +365,13 @@ body {
   opacity: .95; transform: scale(1.06);
 }
 .np-wash {
-  /* ★ z-index 必须高于 .np-bg：np-bg 带 transform:scale() 会创建层叠上下文，
-     同为 z-index:0 时它反而盖在 wash 之上，导致顶部实色带被模糊封面吃掉 → 状态栏毛玻璃。 */
-  position: absolute; inset: 0; z-index: 1;
-  /* 顶部安全区做成实色，盖住 np-bg 模糊封面上溢的颜色 —— 消除状态栏「毛玻璃」，
-     让顶部与页面底色连成一体（对齐参考图）。实色带刚好覆盖 safe-t + 呼吸间距，
-     机型不同（刘海 47 / 灵动岛 59~62）高度自动跟随，无需固定值。 */
-  background:
-    linear-gradient(180deg,
-      #0b0c10 0,
-      #0b0c10 calc(var(--safe-t) + var(--ios-top-gap) + 6px),
-      rgba(11, 12, 16, 0) calc(var(--safe-t) + var(--ios-top-gap) + 42px)),
-    linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
+  position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
 }
 .np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
 .np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
 /* 内容层高于 np-wash(1)，保证半透明遮罩只作用于 np-bg、不遮住文字/按钮 */
-.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 2; }
+.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 1; }
 
 /* 顶部：菜单键 + 来源名 + VIP + 搜索 */
 .np-ios-top { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; }
@@ -541,9 +511,7 @@ body {
 }
 .ios-sheet[hidden] { display: none; }
 .ios-sheet-card {
-  width: 100%;
-  /* 队列很长时也不越过状态栏 / 灵动岛安全区 */
-  max-height: min(86dvh, calc(100dvh - var(--safe-t) - var(--ios-top-gap)));
+  width: 100%; max-height: 86dvh;
   display: flex; flex-direction: column;
   border-radius: 22px 22px 0 0; overflow: hidden;
   background: var(--bg-2);
@@ -661,11 +629,9 @@ body {
 
 /* ── iOS 设置页：适配手机宽度 + 深色控件 ─────── */
 .ios-setpage {
-  /* 顶部完全交给 .ios-mtabs（--ios-top-gap）。容器再带 safe-t 或额外 padding
-     都会和 .window 的安全区叠加，刘海机上出现一整条空白。 */
-  padding: 0 18px calc(var(--dock-h) + 44px + var(--safe-b));
+  padding: calc(var(--safe-t) + 6px) 18px calc(var(--dock-h) + 44px + var(--safe-b));
 }
-.ios-setpage .ios-head { padding: var(--ios-top-gap) 0 10px; }
+.ios-setpage .ios-head { padding: 4px 0 10px; }
 .ios-setpage .ios-head h1 { font-size: 26px; }
 .ios-setpage .set-group { max-width: none; padding: 14px 0 2px; border-top: 1px solid var(--line); }
 .ios-setpage .set-group:first-of-type { border-top: 0; padding-top: 0; }
@@ -718,7 +684,7 @@ body {
 /* ── Music 页顶部 tabs ───────────────────── */
 .ios-mtabs {
   display: flex; align-items: center; gap: 16px;
-  padding: var(--ios-top-gap) 0 14px;
+  padding: 8px 0 14px;
 }
 .ios-mback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
@@ -808,7 +774,7 @@ body {
 .ios-lib-empty .btn { margin-top: 6px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: var(--brand); color: #fff; }
 
 /* ── 搜索页 ─────────────────────────────── */
-.ios-search-head { display: flex; align-items: center; gap: 10px; padding: var(--ios-top-gap) 0 12px; }
+.ios-search-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; }
 .ios-sback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
   background: transparent; color: var(--ink-2); font-size: 20px; line-height: 1; padding: 0 0 4px;
@@ -870,8 +836,7 @@ body {
 .ios-lyrics-page {
   position: fixed; inset: 0; z-index: 210;
   display: flex; flex-direction: column;
-  /* 歌词页同为 fixed 全屏层，与播放页同一套顶部基准 */
-  padding: calc(var(--safe-t) + var(--ios-top-gap)) var(--pad) calc(14px + var(--safe-b));
+  padding: calc(var(--safe-t) + 8px) var(--pad) calc(14px + var(--safe-b));
   background: linear-gradient(180deg, #16233a 0%, #0f1116 62%, #0b0c10 100%);
   transform: translateY(12px); opacity: 0; pointer-events: none;
   transition: transform .22s ease, opacity .22s ease;
