@@ -19,11 +19,10 @@
   --gold: #e6bd7d;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  /* 安全区之下的统一「呼吸间距」。全屏 PWA 状态栏是透明的，内容必须等
-     env(safe-area-inset-top) 之后才开始。14px 是真机实测的平衡点：
-     8px 会让标题贴进状态栏毛玻璃区（显虚、发闷），20px 又让顶部空旷。
-     所有页头一律只用这一个值，禁止在子元素里再叠一份 safe-t。 */
-  --ios-top-gap: 14px;
+  /* 安全区之下的统一「呼吸间距」。顶部不再靠固定值“顶开”，而是完全交给
+     env(safe-area-inset-top) —— 它按机型返回真实刘海/灵动岛高度，iPhone 13~18 全系
+     自动适配。这里只留很小的视觉留白，避免标题贴住状态栏文字。 */
+  --ios-top-gap: 4px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -39,11 +38,17 @@
   --line: rgba(255, 255, 255, .08);
 }
 
-/* 个别 WebKit 版本在 black-translucent 下会把 inset 报成 0；全屏启动时
-   至少留够状态栏高度，避免灵动岛 / 刘海压住标题。只作用于触屏 standalone，
-   普通 Safari 标签页与桌面预览不受影响，不会产生额外空白。 */
-@media (display-mode: standalone) and (pointer: coarse) {
-  :root { --safe-t: max(env(safe-area-inset-top, 0px), 44px); }
+/* 顶部安全区完全按机型自动适配：不做固定 44px 兜底。
+   black-translucent 下正确的 WebKit 会返回真实刘海/灵动岛高度（13 刘海 47 /
+   14~15 灵动岛 59 / 16~18 灵动岛 62），标题自然落在状态栏下方，既不被压住也不空旷。
+   —— 不再用 max(env,44) 硬兜底：那会让小屏也被顶出固定空白，无法按机型适配。 */
+
+/* Safari 普通标签页（有地址栏，非全屏）：浏览器已自己留出状态栏/地址栏，
+   但 viewport-fit=cover 仍会让 env(safe-t) 返回刘海高度，网页再留一段就变成
+   「顶部空一大截、不像全屏」。标签页里把安全区归零，内容贴着浏览器视口顶端铺满。
+   standalone（添加到主屏幕）不受此规则影响，仍按机型真实安全区适配。 */
+@media all and (display-mode: browser) {
+  :root { --safe-t: 0px; }
 }
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
@@ -380,7 +385,15 @@ body {
 }
 .np-wash {
   position: absolute; inset: 0; z-index: 0;
-  background: linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
+  /* 顶部安全区做成实色，盖住 np-bg 模糊封面上溢的颜色 —— 消除状态栏「毛玻璃」，
+     让顶部与页面底色连成一体（对齐参考图）。实色带刚好覆盖 safe-t + 呼吸间距，
+     机型不同（刘海 47 / 灵动岛 59~62）高度自动跟随，无需固定值。 */
+  background:
+    linear-gradient(180deg,
+      #0b0c10 0,
+      #0b0c10 calc(var(--safe-t) + var(--ios-top-gap) + 6px),
+      rgba(11, 12, 16, 0) calc(var(--safe-t) + var(--ios-top-gap) + 42px)),
+    linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
 }
 .np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
 .np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
