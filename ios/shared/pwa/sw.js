@@ -1,6 +1,6 @@
 /* 橙子音乐 PWA：网络优先 + 离线兜底。
    只缓存同源静态资源；云 SDK、授权音源、封面与用户自配置端点一律直连，不缓存、不改写。 */
-const CACHE = 'orangemusic-v42'
+const CACHE = 'orangemusic-v43'
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icon.svg', './release-notes.json',
   './logo.png', './icon-180.png', './icon-192.png', './icon-512.png',

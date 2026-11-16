@@ -70,47 +70,6 @@
   }
 }
 
-/* Safari 标签页（display-mode: browser）：safe inset 归零，内容贴视口边缘。 */
-@media (display-mode: browser) {
-  :root { --safe-t: 0px; --safe-b: 0px; }
-
-  /* dock 毛玻璃：三键保持原位（height/padding 不变），
-     用 ::after 向下延伸 120px 覆盖 Safari 底部工具栏背景，消灭黑块。 */
-  .tabbar {
-    background: transparent;
-    overflow: visible;
-  }
-  .tabbar::after {
-    content: '';
-    position: absolute;
-    left: 0; right: 0;
-    top: 0;
-    height: calc(100% + 120px);
-    background: rgba(20, 21, 26, 0.88);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, .08);
-    z-index: -1;
-  }
-
-  /* 搜索输入框毛玻璃 */
-  .ios-sinput {
-    background: rgba(255, 255, 255, .10);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  /* 播放页操作行靠近 dock：padding-bottom 只留 10px 间距 */
-  .now-playing {
-    padding-bottom: calc(var(--dock-h) + 10px);
-  }
-
-  /* .main 底部留量也相应缩小，避免内容区过高 */
-  .main {
-    padding-bottom: calc(var(--dock-h) + 12px + 20px);
-  }
-}
-
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 body {
   color: var(--ink);
