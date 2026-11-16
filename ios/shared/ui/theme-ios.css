@@ -70,34 +70,44 @@
   }
 }
 
-/* Safari 标签页（display-mode: browser）：
-   浏览器有地址栏/工具栏，视口已经在它们下方，safe inset = 0。
-   把 safe-t/safe-b 归零，让内容贴着 Safari 视口边缘，标题紧贴顶部，三键贴底。
-   这样 Safari 下的布局与参考图一致：内容紧凑无多余间距。 */
+/* Safari 标签页（display-mode: browser）：safe inset 归零，内容贴视口边缘。 */
 @media (display-mode: browser) {
   :root { --safe-t: 0px; --safe-b: 0px; }
 
-  /* dock：毛玻璃背景，覆盖整个 tabbar 区域（含向下延伸，Safari 底部不留缝）*/
+  /* dock 毛玻璃：三键保持原位（height/padding 不变），
+     用 ::after 向下延伸 120px 覆盖 Safari 底部工具栏背景，消灭黑块。 */
   .tabbar {
-    background: rgba(20, 21, 26, 0.72);
+    background: transparent;
+    overflow: visible;
+  }
+  .tabbar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: 0;
+    height: calc(100% + 120px);
+    background: rgba(20, 21, 26, 0.88);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-top: 1px solid rgba(255, 255, 255, .08);
-    /* 向下延伸 100px 确保 Safari 底部工具栏上方无缝隙 */
-    padding-bottom: calc(8px + 100px);
-    height: calc(var(--dock-h) + 12px + 100px);
+    z-index: -1;
   }
 
-  /* 搜索输入框：毛玻璃效果 */
+  /* 搜索输入框毛玻璃 */
   .ios-sinput {
     background: rgba(255, 255, 255, .10);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
 
-  /* 播放页操作行靠近 dock：缩小底部间距 */
+  /* 播放页操作行靠近 dock：padding-bottom 只留 10px 间距 */
   .now-playing {
-    padding-bottom: calc(var(--dock-h) + 8px);
+    padding-bottom: calc(var(--dock-h) + 10px);
+  }
+
+  /* .main 底部留量也相应缩小，避免内容区过高 */
+  .main {
+    padding-bottom: calc(var(--dock-h) + 12px + 20px);
   }
 }
 
