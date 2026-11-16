@@ -89,7 +89,7 @@ body {
 .titlebar, .player, .sidebar, .mini-player { display: none !important; }
 .workspace { display: block; min-height: 0; height: 100%; }
 .main {
-  height: 100%; min-height: 0; padding: 0 0 calc(var(--dock-h) + 34px + var(--safe-b));
+  height: 100%; min-height: 0; padding: 0 0 calc(var(--dock-h) + 12px + var(--safe-b) + 20px);
   overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -97,10 +97,10 @@ body {
 
 /* ── 底部三件套 dock（按参考图：圆键 + 短胶囊 + 圆键）──── */
 .tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+  position: fixed; left: 0; right: 0; bottom: var(--safe-b); z-index: 70;
   display: flex; align-items: center; justify-content: center; gap: 14px;
-  padding: 0 16px calc(10px + var(--safe-b));
-  height: calc(var(--dock-h) + 12px + var(--safe-b));
+  padding: 0 16px 8px;
+  height: calc(var(--dock-h) + 12px);
   border: 0;
   background: linear-gradient(180deg, rgba(15,16,19,0), rgba(15,16,19,.86) 34%, #0f1013 66%);
 }
