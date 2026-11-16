@@ -17,8 +17,8 @@
   --ink-2: #b9bfc9;
   --ink-3: #7c8391;
   --gold: #e6bd7d;
-  --safe-b: env(safe-area-inset-bottom, 0px);
-  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 34px);
+  --safe-t: env(safe-area-inset-top, 47px);
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -34,8 +34,41 @@
   --line: rgba(255, 255, 255, .08);
 }
 
-/* 顶部/底部边距回到 2026-11-15 19:20 前（v1.0.0 / 5f9737c）的基准：
-   不做机型硬兜底、不区分 browser / standalone、不加额外呼吸间距变量。 */
+/* 顶部/底部边距回到 2026-11-15 19:20 前（v1.0.0 / 5f9737c）的基准。
+   机型安全区按 CSS @media 写死：在 black-translucent 全屏 PWA 下 env() 返回正确值，
+   但兜底改为 13 Pro 真值(47/34)，确保查表失败时不退回到 0。
+   精确写死各机型覆盖: 13Pro(390×844), 14/15 Pro(393×852), 16/17/18 Pro(402×874), 对应 Max。 */
+
+@media (display-mode: standalone) {
+  /* iPhone 13 Pro: 390×844 */
+  @media (device-width: 390px) and (device-height: 844px) {
+    :root { --safe-t: 47px; --safe-b: 34px; }
+  }
+  /* iPhone 13 Pro Max: 428×926 */
+  @media (device-width: 428px) and (device-height: 926px) {
+    :root { --safe-t: 47px; --safe-b: 34px; }
+  }
+  /* iPhone 14/15 Pro: 393×852 */
+  @media (device-width: 393px) and (device-height: 852px) {
+    :root { --safe-t: 59px; --safe-b: 34px; }
+  }
+  /* iPhone 14/15 Pro Max: 430×932 */
+  @media (device-width: 430px) and (device-height: 932px) {
+    :root { --safe-t: 59px; --safe-b: 34px; }
+  }
+  /* iPhone 16/17/18 Pro: 402×874 */
+  @media (device-width: 402px) and (device-height: 874px) {
+    :root { --safe-t: 62px; --safe-b: 34px; }
+  }
+  /* iPhone 16/17/18 Pro Max: 440×956 */
+  @media (device-width: 440px) and (device-height: 956px) {
+    :root { --safe-t: 62px; --safe-b: 34px; }
+  }
+  /* iPhone SE 3: 375×667 */
+  @media (device-width: 375px) and (device-height: 667px) {
+    :root { --safe-t: 20px; --safe-b: 0px; }
+  }
+}
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
 body {
