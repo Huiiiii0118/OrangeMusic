@@ -44,20 +44,26 @@ export function buildSite({ out, platform = 'ios' }) {
   // 根入口：资源路径改到 ./ui/，并按端注入唯一不同的视觉主题。
   const theme = platform === 'windows' ? 'macos' : 'ios'
   const accent = theme === 'macos' ? '#e8620a' : '#f2660a'
+  // iOS 用 black-translucent 全屏状态栏：theme-color / manifest 主题色必须与页面深色底
+  // 一致，否则系统会在屏幕顶端另画一条橙色带。与 iPhone 模拟器的实色顶部保持一致。
+  const statusColor = theme === 'ios' ? '#0f1013' : accent
   let html = fs.readFileSync(path.join(SHARED, 'ui', 'index.html'), 'utf8')
   html = html.replace('href="./tokens.css"', 'href="./ui/tokens.css"')
              .replace('href="./app.css"', 'href="./ui/app.css"')
              .replace('src="./app.js"', 'src="./ui/app.js"')
+             .replace('src="./safe-area.js"', 'src="./ui/safe-area.js"')
              .replace(/<!-- THEME_STYLE_SLOT[^>]*-->/, `<link rel="stylesheet" href="./ui/theme-${theme}.css">`)
-             .replace(/<meta name="theme-color" content="[^"]*">/, `<meta name="theme-color" content="${accent}">`)
+             .replace(/<meta name="theme-color" content="[^"]*">/, `<meta name="theme-color" content="${statusColor}">`)
              .replace('<html lang="zh-CN">', `<html lang="zh-CN" data-platform="${platform}" data-theme="${theme}">`)
   fs.writeFileSync(path.join(target, 'index.html'), html)
   written.add('index.html')
 
-  // manifest 的主题色与端一致（iOS 添加到主屏幕后的状态栏色调）。
+  // manifest 的主题色 / 启动底色与端一致。iOS 全屏 PWA 两者都用页面深色底，
+  // 保证从启动画面到状态栏不会出现浅色或橙色色带。
   const manifestPath = path.join(target, 'manifest.webmanifest')
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-  manifest.theme_color = accent
+  manifest.theme_color = statusColor
+  manifest.background_color = theme === 'ios' ? '#0f1013' : '#fff6ee'
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
 
   // iOS：把同源 API 服务一起打进产物，让 www/ 能以「单端口 Node 应用」发布。

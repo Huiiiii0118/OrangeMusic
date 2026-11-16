@@ -365,13 +365,22 @@ body {
   opacity: .95; transform: scale(1.06);
 }
 .np-wash {
-  position: absolute; inset: 0; z-index: 0;
-  background: linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
+  /* 与 iPhone 模拟器一致：安全区内的顶部是实色，不露出模糊封面，
+     模拟器中这一段由外层机身的状态栏绘制，真机上必须由页面自己铺实色。
+     z-index 必须高于 .np-bg：后者带 transform 会创建层叠上下文，
+     同为 0 时会画在 wash 之上，把实色带吃掉（顶部又变毛玻璃）。 */
+  position: absolute; inset: 0; z-index: 1;
+  background:
+    linear-gradient(180deg,
+      #0b0c10 0,
+      #0b0c10 calc(var(--safe-t) + 14px),
+      rgba(11, 12, 16, 0) calc(var(--safe-t) + 50px)),
+    linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
 }
 .np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
 .np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
 /* 内容层高于 np-wash(1)，保证半透明遮罩只作用于 np-bg、不遮住文字/按钮 */
-.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 1; }
+.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 2; }
 
 /* 顶部：菜单键 + 来源名 + VIP + 搜索 */
 .np-ios-top { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; }
