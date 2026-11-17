@@ -45,13 +45,12 @@ export function buildSite({ out, platform = 'ios' }) {
   const theme = platform === 'windows' ? 'macos' : 'ios'
   const accent = theme === 'macos' ? '#e8620a' : '#f2660a'
   // iOS 用 black-translucent 全屏状态栏：theme-color / manifest 主题色必须与页面深色底
-  // 一致，否则系统会在屏幕顶端另画一条橙色带。与 iPhone 模拟器的实色顶部保持一致。
+  // 一致，否则系统会在屏幕顶端另画一条橙色带（用户反馈的「顶部空隙」）。
   const statusColor = theme === 'ios' ? '#0f1013' : accent
   let html = fs.readFileSync(path.join(SHARED, 'ui', 'index.html'), 'utf8')
   html = html.replace('href="./tokens.css"', 'href="./ui/tokens.css"')
              .replace('href="./app.css"', 'href="./ui/app.css"')
              .replace('src="./app.js"', 'src="./ui/app.js"')
-             .replace('src="./safe-area.js"', 'src="./ui/safe-area.js"')
              .replace(/<!-- THEME_STYLE_SLOT[^>]*-->/, `<link rel="stylesheet" href="./ui/theme-${theme}.css">`)
              .replace(/<meta name="theme-color" content="[^"]*">/, `<meta name="theme-color" content="${statusColor}">`)
              .replace('<html lang="zh-CN">', `<html lang="zh-CN" data-platform="${platform}" data-theme="${theme}">`)

@@ -17,8 +17,13 @@
   --ink-2: #b9bfc9;
   --ink-3: #7c8391;
   --gold: #e6bd7d;
-  --safe-b: 34px;
-  --safe-t: env(safe-area-inset-top, 47px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  /* 安全区之下的统一「呼吸间距」。全屏 PWA 状态栏是透明的，内容必须等
+     env(safe-area-inset-top) 之后才开始；这 8px 只是标题与状态栏的视觉间距：
+     太小会贴着灵动岛显得压抑，太大（此前的 20px 基准）又会让顶部空旷。
+     所有页头一律只用这一个值，禁止在子元素里再叠一份 safe-t。 */
+  --ios-top-gap: 8px;
   --dock-h: 62px;
   /* 深色底下的通用控件底色：tokens.css 默认是浅色（--surface: #fff），
      不覆盖就会出现「白底按钮 / 白底下拉框」压不住深色界面（设置页尤其明显）。 */
@@ -34,40 +39,11 @@
   --line: rgba(255, 255, 255, .08);
 }
 
-/* 顶部安全区按机型精确覆盖（@media standalone PWA 下）。
-   底部 safe-b 已在 :root 写死为 34px（13~18 Pro 通用的 Home Indicator 高度），
-   SE3（无 Home Indicator）通过 device-height:667 单独覆盖为 0。
-   device-width/device-height 是 CSS 单位（逻辑 pt），不是物理像素。 */
-
-@media (display-mode: standalone) {
-  /* iPhone 13 Pro: 390×844 */
-  @media (device-width: 390px) and (device-height: 844px) {
-    :root { --safe-t: 47px; }
-  }
-  /* iPhone 13 Pro Max: 428×926 */
-  @media (device-width: 428px) and (device-height: 926px) {
-    :root { --safe-t: 47px; }
-  }
-  /* iPhone 14/15 Pro: 393×852 */
-  @media (device-width: 393px) and (device-height: 852px) {
-    :root { --safe-t: 59px; }
-  }
-  /* iPhone 14/15 Pro Max: 430×932 */
-  @media (device-width: 430px) and (device-height: 932px) {
-    :root { --safe-t: 59px; }
-  }
-  /* iPhone 16/17/18 Pro: 402×874 */
-  @media (device-width: 402px) and (device-height: 874px) {
-    :root { --safe-t: 62px; }
-  }
-  /* iPhone 16/17/18 Pro Max: 440×956 */
-  @media (device-width: 440px) and (device-height: 956px) {
-    :root { --safe-t: 62px; }
-  }
-  /* iPhone SE 3: 375×667（无 Home Indicator，safe-b = 0）*/
-  @media (device-width: 375px) and (device-height: 667px) {
-    :root { --safe-t: 20px; --safe-b: 0px; }
-  }
+/* 个别 WebKit 版本在 black-translucent 下会把 inset 报成 0；全屏启动时
+   至少留够状态栏高度，避免灵动岛 / 刘海压住标题。只作用于触屏 standalone，
+   普通 Safari 标签页与桌面预览不受影响，不会产生额外空白。 */
+@media (display-mode: standalone) and (pointer: coarse) {
+  :root { --safe-t: max(env(safe-area-inset-top, 0px), 44px); }
 }
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
@@ -82,6 +58,8 @@ body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh; max-height: 100dvh;
+  /* 流内页面（Music/乐库、设置、关于、搜索、我的…）的安全区统一由这里承担；
+     内部页头只再补 --ios-top-gap，避免双重 padding 把标题推低、顶部显空。 */
   padding-top: var(--safe-t);
   overflow: hidden;
   background: var(--bg);
@@ -89,7 +67,7 @@ body {
 .titlebar, .player, .sidebar, .mini-player { display: none !important; }
 .workspace { display: block; min-height: 0; height: 100%; }
 .main {
-  height: 100%; min-height: 0; padding: 0 0 calc(var(--dock-h) + 12px + var(--safe-b) + 20px);
+  height: 100%; min-height: 0; padding: 0 0 calc(var(--dock-h) + 34px + var(--safe-b));
   overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -97,10 +75,10 @@ body {
 
 /* ── 底部三件套 dock（按参考图：圆键 + 短胶囊 + 圆键）──── */
 .tabbar {
-  position: fixed; left: 0; right: 0; bottom: var(--safe-b); z-index: 70;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
   display: flex; align-items: center; justify-content: center; gap: 14px;
-  padding: 0 16px 8px;
-  height: calc(var(--dock-h) + 12px);
+  padding: 0 16px calc(10px + var(--safe-b));
+  height: calc(var(--dock-h) + 12px + var(--safe-b));
   border: 0;
   background: linear-gradient(180deg, rgba(15,16,19,0), rgba(15,16,19,.86) 34%, #0f1013 66%);
 }
@@ -124,6 +102,16 @@ body {
 }
 .ios-dock-play:active { transform: scale(.985); }
 .dock-ico { position: relative; z-index: 1; display: grid; place-items: center; color: #fff; }
+/* dock 中央按钮外圈的播放进度环：覆盖整个按钮，描边不随按钮宽度缩放而变形 */
+.dock-ring {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 2; overflow: visible; display: block; pointer-events: none;
+}
+.dock-ring-bg { fill: none; stroke: transparent; stroke-width: 2; }
+.dock-ring-fg {
+  fill: none; stroke: var(--brand); stroke-width: 2.4; stroke-linecap: round;
+  transition: stroke-dashoffset .3s linear;
+}
 @media (max-width: 360px) {
   .ios-dock-play { width: 158px; }
 }
@@ -133,7 +121,8 @@ body {
   position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
   display: block;
   width: 87%; max-width: 348px;
-  padding: calc(var(--safe-t) + 10px) 18px calc(var(--dock-h) + 26px + var(--safe-b));
+  /* fixed 层：只负责安全区，8px 呼吸间距交给内部 .ios-head */
+  padding: var(--safe-t) 18px calc(var(--dock-h) + 26px + var(--safe-b));
   overflow-y: auto; overflow-x: hidden;
   background: var(--bg);
   transform: translateX(-102%);
@@ -161,7 +150,7 @@ body {
 }
 .ios-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0 14px;
+  padding: var(--ios-top-gap) 0 14px;
 }
 .ios-head h1 {
   margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -1.1px; color: var(--ink);
@@ -386,7 +375,8 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: none;
   align-content: stretch;
-  padding: calc(4px + var(--safe-t)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
+  /* 播放页没有独立页头元素，安全区 + 呼吸间距在这里一次给足 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) 26px calc(var(--dock-h) + 26px + var(--safe-b));
   background: #0b0c10; overflow: hidden;
 }
 .now-playing[hidden] { display: none !important; }
@@ -398,22 +388,12 @@ body {
   opacity: .95; transform: scale(1.06);
 }
 .np-wash {
-  /* 与 iPhone 模拟器一致：安全区内的顶部是实色，不露出模糊封面，
-     模拟器中这一段由外层机身的状态栏绘制，真机上必须由页面自己铺实色。
-     z-index 必须高于 .np-bg：后者带 transform 会创建层叠上下文，
-     同为 0 时会画在 wash 之上，把实色带吃掉（顶部又变毛玻璃）。 */
-  position: absolute; inset: 0; z-index: 1;
-  background:
-    linear-gradient(180deg,
-      #0b0c10 0,
-      #0b0c10 calc(var(--safe-t) + 14px),
-      rgba(11, 12, 16, 0) calc(var(--safe-t) + 50px)),
-    linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
+  position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(180deg, rgba(11,12,16,.18), rgba(11,12,16,.58) 52%, #0b0c10 94%);
 }
 .np-collapse, .np-winbtns, .np-bar-left, .np-bar-center .np-mode-btn, #npVolBtn, .np-fold,
 .np-bar-tools, .np-buttons, .np-lyric-col .lyric-seek { display: none !important; }
-/* 内容层高于 np-wash(1)，保证半透明遮罩只作用于 np-bg、不遮住文字/按钮 */
-.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 2; }
+.np-stage, .np-lyric-col, .np-ios-actions, .np-bar, .np-ios-top { position: relative; z-index: 1; }
 
 /* 顶部：菜单键 + 来源名 + VIP + 搜索 */
 .np-ios-top { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; }
@@ -553,7 +533,9 @@ body {
 }
 .ios-sheet[hidden] { display: none; }
 .ios-sheet-card {
-  width: 100%; max-height: 86dvh;
+  width: 100%;
+  /* 队列很长时也不越过状态栏 / 灵动岛安全区 */
+  max-height: min(86dvh, calc(100dvh - var(--safe-t) - var(--ios-top-gap)));
   display: flex; flex-direction: column;
   border-radius: 22px 22px 0 0; overflow: hidden;
   background: var(--bg-2);
@@ -671,9 +653,11 @@ body {
 
 /* ── iOS 设置页：适配手机宽度 + 深色控件 ─────── */
 .ios-setpage {
-  padding: calc(var(--safe-t) + 6px) 18px calc(var(--dock-h) + 44px + var(--safe-b));
+  /* 顶部完全交给 .ios-mtabs（--ios-top-gap）。容器再带 safe-t 或额外 padding
+     都会和 .window 的安全区叠加，刘海机上出现一整条空白。 */
+  padding: 0 18px calc(var(--dock-h) + 44px + var(--safe-b));
 }
-.ios-setpage .ios-head { padding: 4px 0 10px; }
+.ios-setpage .ios-head { padding: var(--ios-top-gap) 0 10px; }
 .ios-setpage .ios-head h1 { font-size: 26px; }
 .ios-setpage .set-group { max-width: none; padding: 14px 0 2px; border-top: 1px solid var(--line); }
 .ios-setpage .set-group:first-of-type { border-top: 0; padding-top: 0; }
@@ -726,7 +710,7 @@ body {
 /* ── Music 页顶部 tabs ───────────────────── */
 .ios-mtabs {
   display: flex; align-items: center; gap: 16px;
-  padding: 8px 0 14px;
+  padding: var(--ios-top-gap) 0 14px;
 }
 .ios-mback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
@@ -816,7 +800,7 @@ body {
 .ios-lib-empty .btn { margin-top: 6px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: var(--brand); color: #fff; }
 
 /* ── 搜索页 ─────────────────────────────── */
-.ios-search-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; }
+.ios-search-head { display: flex; align-items: center; gap: 10px; padding: var(--ios-top-gap) 0 12px; }
 .ios-sback {
   width: 30px; height: 30px; flex: none; border: 0; border-radius: 50%;
   background: transparent; color: var(--ink-2); font-size: 20px; line-height: 1; padding: 0 0 4px;
@@ -878,7 +862,8 @@ body {
 .ios-lyrics-page {
   position: fixed; inset: 0; z-index: 210;
   display: flex; flex-direction: column;
-  padding: calc(var(--safe-t) + 8px) var(--pad) calc(14px + var(--safe-b));
+  /* 歌词页同为 fixed 全屏层，与播放页同一套顶部基准 */
+  padding: calc(var(--safe-t) + var(--ios-top-gap)) var(--pad) calc(14px + var(--safe-b));
   background: linear-gradient(180deg, #16233a 0%, #0f1116 62%, #0b0c10 100%);
   transform: translateY(12px); opacity: 0; pointer-events: none;
   transition: transform .22s ease, opacity .22s ease;
@@ -902,6 +887,15 @@ body {
   scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
 .ly-body::-webkit-scrollbar { display: none; }
+/* 拖动歌词时中间浮层显示目标时间 */
+.ly-drag-time {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 5; padding: 8px 16px; border-radius: 999px;
+  background: rgba(0, 0, 0, .72); color: #fff;
+  font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
+  pointer-events: none; box-shadow: 0 4px 20px rgba(0, 0, 0, .4);
+}
+.ly-drag-time[hidden] { display: none; }
 .ly-row { margin: 24px 0; transition: opacity .2s ease; opacity: .42; }
 .ly-row.on { opacity: 1; }
 .ly-main {
@@ -1155,3 +1149,53 @@ body {
   white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere;
 }
 .audio-diag[hidden] { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Safari 标签页（网页版）专属修复 —— 仅 display-mode: browser 生效。
+   PWA 主屏（standalone / v33）完全不受影响，保持原样。
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (display-mode: browser) {
+  /* 喜欢行下移，与歌词拉开距离、靠近底部三键（纯视觉位移，不改 grid 占位） */
+  .np-ios-actions { transform: translateY(20px); }
+
+  /* 歌词只显示一行，但要「完整」——根治，不再随空间浮动。
+     根因：.np-lyric-col 是 flex 列，空间不足时 .lyrics(flex:1 1 auto) 被 flex-shrink
+     压到不足一行高，文字下半被裁 → 看着像被挡住；不同歌/机型/加载时序高度不同，
+     所以之前调数字总是「时好时坏」。
+     一次性修法：把歌词行做成刚性——flex 不收缩 + height/min-height 锁定一行 +
+     line-height 与 height 对齐；并给 lyric-col 足够最小高度容纳「歌名 + 一行歌词」。
+     全部加 !important，压过后定义/同优先级的全局规则，杜绝被覆盖。 */
+  .now-playing .lyrics {
+    flex: 0 0 auto !important;
+    height: 1.9em !important;
+    min-height: 1.9em !important;
+    max-height: 1.9em !important;
+    line-height: 1.9em !important;
+    overflow: hidden !important;
+  }
+  .now-playing .lyrics .lyric-line { height: 1.9em !important; line-height: 1.9em !important; }
+  .now-playing .np-lyric-col { min-height: 124px !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PWA 主屏（standalone）专属 —— 网页版 / Safari 标签页不受影响。
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (display-mode: standalone) {
+  /* 喜欢行下移，靠近底部三键（纯视觉位移，不改 grid 占位） */
+  .np-ios-actions { transform: translateY(38px); }
+  /* 底部三键整体下移，贴近屏幕底部（保留 safe-b，不压 Home 指示条） */
+  .tabbar { transform: translateY(24px); }
+
+  /* 过长歌词：不换行、不省略，来回滚动显示全文（首尾都能看到）。
+     .ly-scroll 由 JS 检测到溢出后才加，短歌词不动。
+     背景渐变与文字同在这一行元素上，transform 时一起移动，逐字染色不错位。 */
+  .now-playing .lyrics .lyric-line { white-space: nowrap; }
+  .now-playing .lyrics .lyric-line.ly-scroll {
+    animation: lyMarquee 7s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  @keyframes lyMarquee {
+    0%, 12% { transform: translateX(0); }
+    88%, 100% { transform: translateX(var(--scroll, -40px)); }
+  }
+}

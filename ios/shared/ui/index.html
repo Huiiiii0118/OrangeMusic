@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Orange Music · 橙子音乐</title>
 <!-- iOS 网页版：Safari「添加到主屏幕」后全屏运行；Windows exe 复用同一份页面。 -->
+<!-- 全屏 PWA：状态栏透明覆盖在页面内容上，页面背景一直铺到屏幕顶端，顶部不留黑边。
+     theme-color 与页面深色底一致，避免启动/状态栏出现另一种颜色。 -->
 <meta name="theme-color" content="#0f1013">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -23,12 +25,11 @@
 <!-- 零广告 / 零追踪：只放行自身与云 SDK CDN；禁止 object、第三方脚本注入。
      第三方 LX 音源脚本只在同源 Web Worker 沙箱内 eval，Worker 无 DOM / 存储 / 父页面引用。
      connect-src / media-src 放开 http: 仅供用户自配置的授权端点与局域网中转（exe 内置 /api/net）。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://zrcdy.dpdns.org https://raw.githubusercontent.com; style-src 'self'; connect-src 'self' https: http: ; img-src 'self' data: https: http:; media-src 'self' data: blob: file: https: http:; font-src 'self' data:; object-src 'none'; worker-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://static.cloudbase.net https://cdn.jsdelivr.net https://zrcdy.dpdns.org https://raw.githubusercontent.com; style-src 'self'; connect-src 'self' https: http: ; img-src 'self' data: https: http:; media-src 'self' data: blob: file: https: http:; font-src 'self' data:; object-src 'none'; worker-src 'self'; base-uri 'self'; frame-ancestors 'none'">
 <link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./app.css">
 <!-- THEME_STYLE_SLOT：由 tools/build_web.js 按端注入 theme-ios.css / theme-macos.css -->
-<script src="./safe-area.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/3.11.1/cloudbase.full.js"></script>
 </head>
 <body>
 <div class="window" id="window">

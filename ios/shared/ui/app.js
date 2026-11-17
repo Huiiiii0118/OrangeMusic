@@ -2150,6 +2150,7 @@ const IOS_IC = {
   search: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m19.5 19.5-3.4-3.4"/></svg>',
   gear: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.2 14.2a1.5 1.5 0 0 0 .3 1.7l.1.1a1.8 1.8 0 1 1-2.6 2.6l-.1-.1a1.5 1.5 0 0 0-1.7-.3 1.5 1.5 0 0 0-.9 1.4v.2a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-1-1.4 1.5 1.5 0 0 0-1.7.3l-.1.1a1.8 1.8 0 1 1-2.6-2.6l.1-.1a1.5 1.5 0 0 0 .3-1.7 1.5 1.5 0 0 0-1.4-.9H4.2a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.4-1 1.5 1.5 0 0 0-.3-1.7l-.1-.1A1.8 1.8 0 1 1 7.9 4.5l.1.1a1.5 1.5 0 0 0 1.7.3h.1a1.5 1.5 0 0 0 .9-1.4V3.3a1.8 1.8 0 1 1 3.6 0V3.4a1.5 1.5 0 0 0 .9 1.4 1.5 1.5 0 0 0 1.7-.3l.1-.1a1.8 1.8 0 1 1 2.6 2.6l-.1.1a1.5 1.5 0 0 0-.3 1.7v.1a1.5 1.5 0 0 0 1.4.9h.2a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg>',
   queue: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M3.4 7h11.2M3.4 12h8.4M3.4 17h5.6"/><path d="M17.2 12.9v6.4"/><circle cx="19.9" cy="19.9" r="1.35" fill="currentColor" stroke="none"/></svg>',
+  mine: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   plus: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5.4v13.2M5.4 12h13.2"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.8h3c1.5 0 2.9.8 3.7 2l4.4 6.6c.8 1.2 2.2 2 3.7 2H21"/><path d="m18.6 15.2 2.4 1.9-2.4 1.9"/><path d="M3 17.4h3c1.5 0 2.9-.8 3.7-2l.6-.9"/><path d="M12.9 8.9l.9-1c.8-1.2 2.2-2 3.7-2H21"/><path d="m18.6 3 2.4 1.9-2.4 1.9"/></svg>',
   back: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 7.5 12l7 6.5"/></svg>',
@@ -2337,9 +2338,18 @@ function iosRenderNav() {
   const t = S.current
   // Music / 乐库 分页页里：中央不再是纯播放胶囊，而是「当前播放」小卡（封面 + 歌名 + 歌手），
   // 文字过长时左右滚动；点小卡任意处返回播放页，点右侧播放/暂停键只切换播放状态。
+  // 中央按钮外圈的播放进度环：与主体同形（圆角矩形描边），进度由 renderProgress() 更新。
+  // d = 2*(w+h-2r) + 2πr，w/h 用 CSS 实际尺寸经 getBBox 无关的固定 viewBox 近似；
+  // 用 pathLength=100 让 dasharray/dashoffset 直接按百分比算，告别手算周长。
+  const ringSvg = `<svg class="dock-ring" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true">
+      <rect class="dock-ring-bg" x="2" y="2" width="196" height="56" rx="28" pathLength="100" vector-effect="non-scaling-stroke"></rect>
+      <rect class="dock-ring-fg" x="2" y="2" width="196" height="56" rx="28" pathLength="100" vector-effect="non-scaling-stroke"
+            stroke-dasharray="100" stroke-dashoffset="100"></rect>
+    </svg>`
   let center
   if (inMusic && t) {
     center = `<button class="ios-dock-np" data-ios-open aria-label="返回播放页">
+        ${ringSvg}
         <span class="ios-dock-np-cv">${coverHtml(t)}</span>
         <span class="ios-dock-np-meta">
           <b class="ios-dock-np-title"><span>${esc(t.title || '未在播放')}</span></b>
@@ -2348,18 +2358,30 @@ function iosRenderNav() {
       </button>`
   } else {
     center = `<button class="ios-dock-play" data-ios-toggle aria-label="${S.playing ? '暂停' : '播放'}">
+        ${ringSvg}
         <span class="dock-ico">${S.playing ? IOS_PAUSE_LG : IOS_PLAY_LG}</span>
       </button>`
   }
+  // 底部右键统一为「我的」+ 人像图标（PWA 与网页版一致）；播放队列入口保留在播放页操作行/歌词页。
   $('#tabbar').innerHTML = `
     <button class="ios-dock-key${drawer ? ' on' : ''}" data-ios-drawer aria-label="音乐库">${IOS_IC.home}</button>
     ${center}
-    <button class="ios-dock-key" data-ios-queue aria-label="播放列表">
-      ${IOS_IC.queue}
-    </button>`
+    <button class="ios-dock-key" data-ios-go="mine" aria-label="我的">${IOS_IC.mine}</button>`
   const bar = $('#tabbar')
   if (bar) bar.classList.toggle('in-player', inPlayer)
+  iosPaintDockRing()
   if (inMusic && t) iosInitDockNpMarquee()
+}
+
+// 重绘 dock 中央按钮外圈的播放进度环（切页重建 DOM 后也要立即恢复当前进度）
+function iosPaintDockRing() {
+  const fg = document.querySelector('#tabbar .dock-ring-fg')
+  if (!fg) return
+  const a = $('#previewAudio')
+  const dur = Number(S.current?.durationMs) || (a && isFinite(a.duration) ? a.duration * 1000 : 0) || 0
+  const pos = Number(S.positionMs) || 0
+  const pct = dur > 0 ? Math.max(0, Math.min(100, (pos / dur) * 100)) : 0
+  fg.style.strokeDashoffset = String((100 - pct).toFixed(2))
 }
 
 // Music / 乐库 分页页里的「当前播放」小卡：文字过长时左右滚动显示（前后滚动）。
@@ -2503,6 +2525,7 @@ function iosRenderLyricsPage() {
       <button class="ly-like${t && (S.favorites || []).some((x) => x.key === t.key) ? ' on' : ''}" data-ios-lylike aria-label="喜欢">♥</button>
     </div>
     <div class="ly-body" id="iosLyBody">${body}</div>
+    <div class="ly-drag-time" id="iosLyDragTime" hidden></div>
     <div class="ly-seek-wrap">
       <input class="ly-seek" id="iosLySeek" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度">
     </div>
@@ -2540,10 +2563,13 @@ function iosRenderLyricsPage() {
       try { if (a) a.currentTime = ms / 1000 } catch { /* ignore */ }
     }
   }
-  // 点击歌词行 → 跳转到该行时间，并同步底部进度条（拖动歌词即定位）
+  // 拖动歌词 → 中间显示目标时间，松手跳到该进度；单击歌词行也跳转。
+  bindLyPageDrag()
   const lyBody = $('#iosLyBody')
   if (lyBody) {
     lyBody.onclick = (e) => {
+      // 拖动过的那一下不再触发单击跳转（松手已 seek）
+      if (lyBody.dataset.dragged === '1') { delete lyBody.dataset.dragged; return }
       const row = e.target.closest('.ly-row')
       if (!row || S.lyrics?.loading) return
       const idx = Number(row.dataset.ly)
@@ -2551,6 +2577,65 @@ function iosRenderLyricsPage() {
       iosSeekTo(time)
     }
   }
+}
+
+// 歌词详情页：拖动歌词时中间浮层显示目标行时间，松手 seek 到该进度。
+// 只绑定一次（歌词页 DOM 每次 open 会重建，用 id 上的标记避免重复）。
+function bindLyPageDrag() {
+  const body = $('#iosLyBody')
+  const tip = $('#iosLyDragTime')
+  if (!body || !tip || body.dataset.dragBound) return
+  body.dataset.dragBound = '1'
+  let drag = null
+  const lines = () => S.lyrics?.lines || []
+  // 视口中心最近的一行 = 拖到的目标行
+  const nearestIdx = () => {
+    const nodes = body.querySelectorAll('.ly-row')
+    if (!nodes.length) return -1
+    const mid = body.getBoundingClientRect().top + body.clientHeight / 2
+    let best = -1, bestD = Infinity
+    nodes.forEach((n, i) => {
+      const r = n.getBoundingClientRect()
+      const d = Math.abs(r.top + r.height / 2 - mid)
+      if (d < bestD) { bestD = d; best = i }
+    })
+    return best
+  }
+  const showTip = () => {
+    const i = nearestIdx()
+    if (i < 0) return
+    const ms = Number(lines()[i]?.time) || 0
+    tip.textContent = mmss(ms)
+    tip.hidden = false
+  }
+  body.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !lines().length) return
+    drag = { y: e.clientY, top: body.scrollTop, moved: false }
+    try { body.setPointerCapture(e.pointerId) } catch { /* 老内核忽略 */ }
+    showTip()
+    e.preventDefault()
+  })
+  body.addEventListener('pointermove', (e) => {
+    if (!drag) return
+    const dy = e.clientY - drag.y
+    if (Math.abs(dy) > 3) drag.moved = true
+    body.scrollTop = Math.max(0, drag.top - dy)
+    showTip()
+  })
+  const finish = () => {
+    if (!drag) return
+    const moved = drag.moved
+    drag = null
+    tip.hidden = true
+    if (!moved) return
+    const i = nearestIdx()
+    if (i < 0) return
+    body.dataset.dragged = '1'   // 抑制随后那次 click 的重复 seek
+    iosSeekTo(Number(lines()[i]?.time) || 0)
+    setTimeout(() => { delete body.dataset.dragged }, 0)
+  }
+  body.addEventListener('pointerup', finish)
+  body.addEventListener('pointercancel', finish)
 }
 
 // 全局跳转：按毫秒定位当前曲播放进度（歌词行点击 / 进度条拖动共用）
@@ -2923,6 +3008,7 @@ function iosCycleMode() {
   iosRenderNav()
 }
 
+// 音质选择弹层：列出所有档位直接点选（替代原来的「点一下循环切换」）
 function iosMoreSheetHtml() {
   const t = S.current
   const liked = !!(t && (S.favorites || []).some((x) => x.key === t.key))
@@ -2974,13 +3060,14 @@ function iosQualityLabel() {
   const map = { auto: '自动', lossless: '无损', hq: '高品质', sq: '标准', lq: '流畅' }
   return map[S.quality] || '标准'
 }
+// 点音质键在当前页面循环切换档位（不弹列表）
 function iosCycleQuality() {
   const order = ['auto', 'lossless', 'hq', 'sq', 'lq']
   const i = Math.max(0, order.indexOf(S.quality))
   S.quality = order[(i + 1) % order.length]
   try { S.core?.quality?.setPref?.(S.quality) } catch { /* 忽略 */ }
   try { syncQualityLabels?.() } catch { /* 忽略 */ }
-  iosSheetRender()
+  iosSyncNp()
 }
 function iosCycleRate() {
   const order = [1, 1.25, 1.5, 2, 0.8]
@@ -3880,11 +3967,10 @@ function orangeProfileHtml() {
           ${bf.tip ? `<small class="hint">${esc(bf.tip)}</small>` : ''}
         </div>`
   const keepOn = S.core?.auth?.keepLoginEnabled?.() !== false
+  // CloudBase 当前只开通手机号登录；邮箱绑定 / 自助合并不支持，整段删除
   const bindHtml = `<div class="set-group prof-bind">
-    <h3>账号绑定</h3>
-    ${bindRow('email')}
-    ${bindRow('phone')}
-    ${bindFlowHtml}
+    <h3>账号</h3>
+    <div class="set-row"><div><b>手机号</b><small>${esc(acct.maskedPhone || phone || '未绑定')}</small></div><span class="pill">已绑定</span></div>
     <div class="set-row prof-keep">
       <div><b>登录保持</b><small>开启后 7 天内打开软件都无需重新登录；关闭后下次启动需要重新登录</small></div>
       <button class="switch${keepOn ? ' on' : ''}" id="keepLoginSwitch" role="switch" aria-checked="${keepOn ? 'true' : 'false'}" aria-label="登录保持"><i></i></button>
@@ -3907,8 +3993,8 @@ function orangeProfileHtml() {
   </div>`
 }
 
-// ── 登录面板：邮箱 / 手机号验证码（首次登录自动注册）─────────────────────
-let authMode = 'email'
+// ── 登录面板：仅手机号验证码（CloudBase 云端只开通手机号；邮箱/OAuth 已删除）──
+let authMode = 'phone'
 function openLoginSheet() {
   const sheet = $('#loginSheet')
   if (!sheet) return
@@ -3918,22 +4004,22 @@ function openLoginSheet() {
   const out = $('#logoutBtn')
   if (out) out.hidden = !S.session
   if (!S.cloud) { if (err) err.textContent = '云服务未加载，当前为离线试用'; return }
-  setAuthMode(authMode)
+  // 隐藏邮箱/方式切换段（当前云端不支持），强制手机号
+  const seg = $('#loginSeg')
+  if (seg) seg.hidden = true
+  setAuthMode('phone')
 }
 
 function setAuthMode(mode) {
-  authMode = mode === 'phone' ? 'phone' : 'email'
-  document.querySelectorAll('#loginSeg .seg-btn').forEach((b) => b.classList.toggle('is-on', b.dataset.authmode === authMode))
+  authMode = 'phone'   // 只保留手机号
+  document.querySelectorAll('#loginSeg .seg-btn').forEach((b) => b.classList.toggle('is-on', b.dataset.authmode === 'phone'))
   const lab = $('#loginTargetLabel'), inp = $('#loginTarget')
-  if (lab) lab.textContent = authMode === 'email' ? '邮箱地址' : '手机号'
+  if (lab) lab.textContent = '手机号'
   if (inp) {
-    inp.placeholder = authMode === 'email' ? 'you@example.com' : '11 位手机号'
-    inp.inputMode = authMode === 'email' ? 'email' : 'numeric'
-    inp.maxLength = authMode === 'email' ? 120 : 11
-    inp.value = ''
+    inp.placeholder = '11 位手机号'
+    inp.inputMode = 'numeric'
+    inp.maxLength = 11
   }
-  if ($('#sendTip')) $('#sendTip').textContent = ''
-  if ($('#otp')) $('#otp').value = ''
 }
 
 function bindAuthSheet() {
@@ -3947,9 +4033,9 @@ function bindAuthSheet() {
       send.disabled = true
       try {
         const target = String($('#loginTarget').value || '').trim()
-        const r = await S.core.auth.sendCode(authMode === 'email' ? { email: target } : { phone: target })
+        const r = await S.core.auth.sendCode({ phone: target })
         const tip = $('#sendTip')
-        if (tip) tip.textContent = r.isExistingUser ? '验证码已发送，请查收（以最新一条短信 / 邮件为准）' : '验证码已发送（首次登录自动建号）'
+        if (tip) tip.textContent = '验证码已发送，请查收短信'
         // 重发后旧验证码立即作废：清空输入框，避免用户把旧短信里的码再填一遍（这正是「验证码已失效」的高频根因）
         const otp = $('#otp')
         if (otp) { otp.value = ''; otp.focus() }
@@ -4010,7 +4096,11 @@ async function afterLogin(res) {
     if (S.session) S.session.user = u
     S.identity = S.core.auth.loadIdentity() || S.identity || {}
   } catch { /* 拉不到不影响登录 */ }
-  await migrateLocalToCloud()
+  // 登录后做「本地 ↔ 云端」差异合并：本地歌单始终保留，只有不同才增删
+  try {
+    const r = await S.core.repo?.mergeLocalOnLogin?.()
+    if (r && (r.uploaded || r.downloaded)) toast(`已同步：本机上传 ${r.uploaded} 项 / 云端更新 ${r.downloaded} 项`)
+  } catch { /* 合并失败不挡登录，syncUserState 仍会按云端渲染 */ }
   await syncUserState()
   $('#loginSheet').hidden = true
   toast(S.session ? '已登录：歌单 / 收藏会同步到腾讯云' : '登录状态未恢复，请重试')
@@ -6576,6 +6666,11 @@ function renderProgress() {
   // 精简模式封面外圈的环形进度（r=57 → 周长 358.1）
   const ring = $('#miniRing')
   if (ring) ring.style.strokeDashoffset = String((358.1 * (1 - Math.min(1, pct / 1000))).toFixed(1))
+  // iOS dock 中央播放键外圈的进度环（pathLength=100，dashoffset 直接用百分比）
+  if (IS_IOS) {
+    const fg = document.querySelector('#tabbar .dock-ring-fg')
+    if (fg) fg.style.strokeDashoffset = String(Math.max(0, Math.min(100, 100 - pct / 10)).toFixed(2))
+  }
   highlightLyric(pos)
   if (IS_IOS) { try { syncLockScreenLyric(pos) } catch { /* 锁屏歌词不可用 */ } }
   if (IS_IOS) { try { iosPaintLyricSung(pos) } catch { /* 歌词未就绪 */ } }
@@ -6706,6 +6801,30 @@ function renderLyrics() {
   box.innerHTML = L.lines.map((l) => `<div class="lyric-line" data-t="${l.time}">${esc(l.text)}</div>`).join('')
   delete box.dataset.on
   highlightLyric(S.positionMs)
+  applyLyricMarquee(box)
+}
+
+// PWA（standalone）里过长歌词来回滚动显示全文：只在文字真溢出时加 .ly-scroll，
+// 并把溢出像素写进 --scroll 供 CSS 动画用。网页版不处理（保持原样）。
+function applyLyricMarquee(box) {
+  if (!box || !IS_IOS) return
+  let standalone = false
+  try { standalone = window.matchMedia('(display-mode: standalone)').matches } catch { /* 忽略 */ }
+  if (!standalone) return
+  box.querySelectorAll('.lyric-line').forEach((line) => {
+    line.classList.remove('ly-scroll')
+    line.style.removeProperty('--scroll')
+  })
+  // 等一帧量真实宽度（字体/布局就绪后再测）
+  requestAnimationFrame(() => {
+    box.querySelectorAll('.lyric-line').forEach((line) => {
+      const over = line.scrollWidth - line.clientWidth
+      if (over > 2) {
+        line.style.setProperty('--scroll', `${-over}px`)
+        line.classList.add('ly-scroll')
+      }
+    })
+  })
 }
 
 // 歌词按「与当前行的距离」做深浅渐变：近的深、远的浅，且带平滑过渡（#13 / #14）。
@@ -7245,17 +7364,9 @@ function startPositionSync() {
     if (!stalledSince) stalledSince = Date.now()
     if (Date.now() - stalledSince > 8000) { stalledSince = 0; reResolveCurrent() }
   }, 2000)
-  setInterval(async () => {
-    if (!S.cloud || !S.current) return
-    try {
-      // 续听队列按原规定保留前 100 首（不再砍到 30 首）；写入周期 15s 避免周期性顿卡。
-      await S.core.repo.setState(S.core.repo.keys.playback, {
-        track: S.current, positionMs: S.positionMs,
-        queue: S.queue.slice(0, 100), device: S.device,
-      })
-    } catch { /* 网络抖动下次 tick 重试 */ }
-  }, 15000)
-  // 退出前立即落盘：iOS PWA 被关掉时 15s 定时器常还没跑到，导致「下次进来没回到上次那首」。
+  // 续听进度只在「离开」时写一次（pagehide / 切后台），不再每 15s 轮询写云端——
+  // 后者是资源点消耗大头（约 576 点/月），且退出时的那一次落盘已足够续播。
+  // 续听队列保留前 100 首。
   const savePlaybackNow = () => {
     try {
       if (!S.current || !S.core?.repo?.setState) return

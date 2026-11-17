@@ -28,20 +28,41 @@ async function ownerName() {
   return s.user.name ?? null
 }
 
+// 本地镜像：歌单/收藏等始终在本机保留一份，退出登录、云端停服都不丢。
+// 登录后以云端为准做差异同步（见 mergeLocalOnLogin），本机只是镜像 + 离线缓存。
+export const mirrorSet = (key, value) => { try { lsSet(stateKey(key), value) } catch { /* noop */ } }
+export const mirrorGet = (key) => lsGet(stateKey(key))
+export const mirrorKeys = () => {
+  const out = [], prefix = LS + 'state:'
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || ''
+      if (k.startsWith(prefix)) out.push(k.slice(prefix.length))
+    }
+  } catch { /* noop */ }
+  return out
+}
+
 export async function getState(key) {
   if (isLocalOnly()) return lsGet(stateKey(key))
   await requireSession()
-  const { data, error } = await db().from('user_state').select('value').eq('key', key).maybeSingle()
+  // CloudBase app.rdb() 是 PostgREST 风格；用 limit(1) 兼容所有版本（不依赖 maybeSingle）
+  const { data, error } = await db().from('user_state').select('value').eq('key', key).limit(1)
   if (error) throw error
-  return data?.value ?? null
+  const value = (Array.isArray(data) ? data[0] : null)?.value ?? null
+  // 云端读到就刷新本地镜像；云端暂时没这条也不删本地（离线可继续用）
+  if (value != null) mirrorSet(key, value)
+  return value
 }
 
 // 不用 upsert：客户端绝不发送 owner_id，由 DB 的 DEFAULT auth.uid() 填充。
 export async function setState(key, value) {
   if (isLocalOnly()) { lsSet(stateKey(key), value); return { key, value, offline: true } }
+  mirrorSet(key, value)   // 先写本地镜像：即使云端失败，本机也不丢
   const name = await ownerName()
-  const { data: found, error: readErr } = await db().from('user_state').select('id').eq('key', key).maybeSingle()
+  const { data: foundRows, error: readErr } = await db().from('user_state').select('id').eq('key', key).limit(1)
   if (readErr) throw readErr
+  const found = Array.isArray(foundRows) ? foundRows[0] : null
   const q = found
     ? db().from('user_state').update({ value }).eq('id', found.id).select()
     : db().from('user_state').insert({ key, value, owner_name: name }).select()
@@ -50,6 +71,34 @@ export async function setState(key, value) {
   const rows = Array.isArray(data) ? data : []
   if (!rows.length) throw new Error('保存失败：可能未登录或该记录不属于当前账号')
   return rows[0]
+}
+
+// 登录后差异同步：
+//  - 云端有、本地也有 → 以云端为准覆盖本地（跨设备最新）
+//  - 云端有、本地没有 → 存进本地镜像
+//  - 本地有、云端没有 → 上传云端（离线期间新增的歌单不丢）
+// 只有真正不同的 key 才做增删，绝不整体清空本地。
+export async function mergeLocalOnLogin() {
+  if (isLocalOnly()) return { uploaded: 0, downloaded: 0 }
+  await requireSession()
+  let uploaded = 0, downloaded = 0
+  const keys = [...new Set(mirrorKeys())]
+  for (const key of keys) {
+    try {
+      const { data, error } = await db().from('user_state').select('value').eq('key', key).limit(1)
+      if (error) continue
+      const cloudVal = Array.isArray(data) ? (data[0]?.value ?? null) : null
+      const localVal = mirrorGet(key)
+      if (cloudVal == null && localVal != null) {
+        await setState(key, localVal)   // 本地独有 → 上传
+        uploaded++
+      } else if (cloudVal != null && JSON.stringify(cloudVal) !== JSON.stringify(localVal)) {
+        mirrorSet(key, cloudVal)        // 云端更新 → 覆盖本地
+        downloaded++
+      }
+    } catch { /* 单条失败不影响整体 */ }
+  }
+  return { uploaded, downloaded }
 }
 
 export async function listState(prefix) {

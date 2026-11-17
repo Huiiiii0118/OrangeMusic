@@ -35,6 +35,9 @@ async function neteaseDetail(id) {
     singer: (s.artists || s.ar || []).map((a) => a.name).filter(Boolean).join(' / '),
     durationMs: Number(s.duration || s.dt) || 0,
     album: s.album?.name || s.al?.name || '',
+    // 伴奏/翻唱标记常藏在别名里（歌名本身干净）→ 一并带回供 identityMatches 拦截
+    alias: Array.isArray(s.alias) ? s.alias : (s.alia || []),
+    subtitle: s.subtitle || '',
   }
 }
 
@@ -48,6 +51,9 @@ async function qqDetail(songmid) {
     singer: (s.singer || []).map((a) => a.name).filter(Boolean).join(' / '),
     durationMs: interval > 0 ? interval * 1000 : 0,
     album: s.album?.name || s.album?.title || '',
+    // QQ 的 subtitle 常标「伴奏 / instrumental」
+    alias: [],
+    subtitle: s.subtitle || s.sub_title || '',
   }
 }
 
@@ -128,8 +134,15 @@ const NON_SONG = /(伴奏|纯音乐|无伴唱|instrumental|karaoke|试听|片段
  */
 export function identityMatches(want, real) {
   if (!real || !real.name) return { ok: true, why: '' }   // 没查到就不能臆断，放行
-  // 只拦明确不是完整歌曲的：伴奏/纯音乐/试听片段/过短时长
-  if (NON_SONG.test(real.name)) return { ok: false, why: `ID 指向片段或伴奏：${real.name}` }
+  // 只拦明确不是完整歌曲的：伴奏/纯音乐/试听片段/过短时长。
+  // 关键修复：伴奏版本很多平台「歌名」是干净的（就叫「叹云兮」），但伴奏标记藏在
+  // 别名 / 副标题字段（alias / subtitle / alia / songAlias）里，只查 name 会漏 → 播成伴奏。
+  // 因此把这些版本标识字段拼进来一起判。
+  const versionTags = [
+    real.name,
+    ...(Array.isArray(real.alias) ? real.alias : [real.alias, real.subtitle, real.alia, real.songAlias, real.transName]),
+  ].filter(Boolean).map(String).join(' ')
+  if (NON_SONG.test(versionTags)) return { ok: false, why: `ID 指向片段或伴奏：${versionTags}` }
   if (real.durationMs > 0 && real.durationMs < 60000) {
     return { ok: false, why: `ID 指向过短音频（${Math.round(real.durationMs / 1000)}s）：${real.name}` }
   }

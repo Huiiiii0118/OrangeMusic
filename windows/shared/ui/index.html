@@ -23,11 +23,11 @@
 <!-- 零广告 / 零追踪：只放行自身与云 SDK CDN；禁止 object、第三方脚本注入。
      第三方 LX 音源脚本只在同源 Web Worker 沙箱内 eval，Worker 无 DOM / 存储 / 父页面引用。
      connect-src / media-src 放开 http: 仅供用户自配置的授权端点与局域网中转（exe 内置 /api/net）。 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://zrcdy.dpdns.org https://raw.githubusercontent.com; style-src 'self'; connect-src 'self' https: http: ; img-src 'self' data: https: http:; media-src 'self' blob: file: https: http:; font-src 'self' data:; object-src 'none'; worker-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://static.cloudbase.net https://cdn.jsdelivr.net https://zrcdy.dpdns.org https://raw.githubusercontent.com; style-src 'self'; connect-src 'self' https: http: ; img-src 'self' data: https: http:; media-src 'self' blob: file: https: http:; font-src 'self' data:; object-src 'none'; worker-src 'self'; base-uri 'self'; frame-ancestors 'none'">
 <link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./app.css">
 <!-- THEME_STYLE_SLOT：由 tools/build_web.js 按端注入 theme-ios.css / theme-macos.css -->
-<script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/3.11.1/cloudbase.full.js"></script>
 </head>
 <body>
 <div class="window" id="window">

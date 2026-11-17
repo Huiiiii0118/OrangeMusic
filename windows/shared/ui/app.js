@@ -2963,11 +2963,10 @@ function orangeProfileHtml() {
           ${bf.tip ? `<small class="hint">${esc(bf.tip)}</small>` : ''}
         </div>`
   const keepOn = S.core?.auth?.keepLoginEnabled?.() !== false
+  // CloudBase 当前只开通手机号登录；邮箱绑定 / 自助合并不支持，整段删除
   const bindHtml = `<div class="set-group prof-bind">
-    <h3>账号绑定</h3>
-    ${bindRow('email')}
-    ${bindRow('phone')}
-    ${bindFlowHtml}
+    <h3>账号</h3>
+    <div class="set-row"><div><b>手机号</b><small>${esc(acct.maskedPhone || phone || '未绑定')}</small></div><span class="pill">已绑定</span></div>
     <div class="set-row prof-keep">
       <div><b>登录保持</b><small>开启后 7 天内打开软件都无需重新登录；关闭后下次启动需要重新登录</small></div>
       <button class="switch-btn${keepOn ? ' on' : ''}" id="keepLoginSwitch" role="switch" aria-checked="${keepOn ? 'true' : 'false'}" aria-label="登录保持"><i></i></button>
@@ -2991,8 +2990,8 @@ function orangeProfileHtml() {
   </div>`
 }
 
-// ── 登录面板：邮箱 / 手机号验证码（首次登录自动注册）─────────────────────
-let authMode = 'email'
+// ── 登录面板：仅手机号验证码（CloudBase 云端只开通手机号；邮箱/OAuth 已删除）──
+let authMode = 'phone'
 function openLoginSheet() {
   const sheet = $('#loginSheet')
   if (!sheet) return
@@ -3002,22 +3001,21 @@ function openLoginSheet() {
   const out = $('#logoutBtn')
   if (out) out.hidden = !S.session
   if (!S.cloud) { if (err) err.textContent = '云服务未加载，当前为离线试用'; return }
-  setAuthMode(authMode)
+  const seg = $('#loginSeg')
+  if (seg) seg.hidden = true
+  setAuthMode('phone')
 }
 
 function setAuthMode(mode) {
-  authMode = mode === 'phone' ? 'phone' : 'email'
-  document.querySelectorAll('#loginSeg .seg-btn').forEach((b) => b.classList.toggle('is-on', b.dataset.authmode === authMode))
+  authMode = 'phone'
+  document.querySelectorAll('#loginSeg .seg-btn').forEach((b) => b.classList.toggle('is-on', b.dataset.authmode === 'phone'))
   const lab = $('#loginTargetLabel'), inp = $('#loginTarget')
-  if (lab) lab.textContent = authMode === 'email' ? '邮箱地址' : '手机号'
+  if (lab) lab.textContent = '手机号'
   if (inp) {
-    inp.placeholder = authMode === 'email' ? 'you@example.com' : '11 位手机号'
-    inp.inputMode = authMode === 'email' ? 'email' : 'numeric'
-    inp.maxLength = authMode === 'email' ? 120 : 11
-    inp.value = ''
+    inp.placeholder = '11 位手机号'
+    inp.inputMode = 'numeric'
+    inp.maxLength = 11
   }
-  if ($('#sendTip')) $('#sendTip').textContent = ''
-  if ($('#otp')) $('#otp').value = ''
 }
 
 function bindAuthSheet() {
@@ -3031,9 +3029,9 @@ function bindAuthSheet() {
       send.disabled = true
       try {
         const target = String($('#loginTarget').value || '').trim()
-        const r = await S.core.auth.sendCode(authMode === 'email' ? { email: target } : { phone: target })
+        const r = await S.core.auth.sendCode({ phone: target })
         const tip = $('#sendTip')
-        if (tip) tip.textContent = r.isExistingUser ? '验证码已发送，请查收（以最新一条短信 / 邮件为准）' : '验证码已发送（首次登录自动建号）'
+        if (tip) tip.textContent = '验证码已发送，请查收短信'
         // 重发后旧验证码立即作废：清空输入框，避免用户把旧短信里的码再填一遍（这正是「验证码已失效」的高频根因）
         const otp = $('#otp')
         if (otp) { otp.value = ''; otp.focus() }
@@ -3093,7 +3091,11 @@ async function afterLogin(res) {
     if (S.session) S.session.user = u
     S.identity = S.core.auth.loadIdentity() || S.identity || {}
   } catch { /* 拉不到不影响登录 */ }
-  await migrateLocalToCloud()
+  // 登录后做「本地 ↔ 云端」差异合并：本地歌单始终保留，只有不同才增删
+  try {
+    const r = await S.core.repo?.mergeLocalOnLogin?.()
+    if (r && (r.uploaded || r.downloaded)) toast(`已同步：本机上传 ${r.uploaded} 项 / 云端更新 ${r.downloaded} 项`)
+  } catch { /* 合并失败不挡登录 */ }
   await syncUserState()
   $('#loginSheet').hidden = true
   toast(S.session ? '已登录：歌单 / 收藏会同步到腾讯云' : '登录状态未恢复，请重试')
@@ -6110,16 +6112,22 @@ function startPositionSync() {
     if (!stalledSince) stalledSince = Date.now()
     if (Date.now() - stalledSince > 8000) { stalledSince = 0; reResolveCurrent() }
   }, 2000)
-  setInterval(async () => {
-    if (!S.cloud || !S.current) return
+  // 续听进度只在「离开」时写一次（关闭窗口 / 切后台），不再每 15s 轮询写云端——
+  // 后者是资源点消耗大头（约 576 点/月），且退出时的那一次落盘已足够续播。
+  // 续听队列保留前 100 首。
+  const savePlaybackNow = () => {
     try {
-      // 续听队列按原规定保留前 100 首（不再砍到 30 首）；写入周期 15s 避免周期性顿卡。
-      await S.core.repo.setState(S.core.repo.keys.playback, {
+      if (!S.current || !S.core?.repo?.setState) return
+      S.core.repo.setState(S.core.repo.keys.playback, {
         track: S.current, positionMs: S.positionMs,
         queue: S.queue.slice(0, 100), device: S.device,
-      })
-    } catch { /* 网络抖动下次 tick 重试 */ }
-  }, 15000)
+      }).catch(() => {})
+    } catch { /* ignore */ }
+  }
+  try { window.addEventListener('beforeunload', savePlaybackNow) } catch { /* ignore */ }
+  try {
+    document.addEventListener('visibilitychange', () => { if (document.hidden) savePlaybackNow() })
+  } catch { /* ignore */ }
 }
 
 // ---- 音质 ----
