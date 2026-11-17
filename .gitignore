@@ -32,3 +32,32 @@ Thumbs.db
 # Release 暂存目录：里面的 exe 有 122MB，GitHub 单文件上限 100MB 会直接拒收。
 # 发布时在网页端把 GitHub/*.exe 拖进 Release 附件即可，不要提交进仓库。
 GitHub/
+
+# ── 安全：敏感文件与密钥 ────────────────────────────────────────────────
+# 环境密钥、凭据类文件一律不入库
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.pfx
+.secret
+.secrets
+
+# 云服务商本地配置文件（含访问密钥）
+.tcbrc
+.cloudbaserc*
+.tcb/
+.tencentcloudbase/
+
+# 编辑器 / IDE 隐私配置（含项目路径、历史文件等）
+.vscode/settings.local.json
+.vscode/launch.local.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+

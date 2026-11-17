@@ -1,0 +1,59 @@
+#!/bin/sh
+# pre-push 安全检查：确保没有敏感信息会被提交到 GitHub
+set -e
+echo "=== Orange Music · pre-push 安全检查 ==="
+
+ERRORS=0
+
+# 1. 检查 publicConfig.js 中的 publishableKey 是否为空或占位符
+for f in ios/shared/config/publicConfig.js windows/shared/config/publicConfig.js; do
+  if [ -f "$f" ]; then
+    KEY=$(grep "publishableKey" "$f" | grep -oE "wbpk_[a-zA-Z0-9_]+" || true)
+    if [ -n "$KEY" ]; then
+      echo "❌ [$f] 发现真实 publishableKey，禁止推送！"
+      echo "   发现: $KEY"
+      ERRORS=$((ERRORS+1))
+    else
+      echo "✅ [$f] publishableKey 为空（占位符 OK）"
+    fi
+    
+    APPID=$(grep "wbapp_[a-zA-Z0-9]" "$f" | grep -oE "wbapp_[a-zA-Z0-9]+" || true)
+    if [ -n "$APPID" ]; then
+      echo "⚠️  [$f] 发现旧 WorkBuddy Cloud Service appId（旧服务已失效，建议清空）"
+    fi
+  fi
+done
+
+# 2. 运行全量安全扫描
+if [ -f "tools/security_scan.mjs" ]; then
+  echo ""
+  echo "=== 全量敏感信息扫描 ==="
+  if node tools/security_scan.mjs 2>&1 | tee /dev/stderr | grep -q "❌"; then
+    echo "❌ security_scan 发现敏感信息"
+    ERRORS=$((ERRORS+1))
+  else
+    echo "✅ security_scan 通过"
+  fi
+fi
+
+# 3. 检查 staging area 中的敏感文件
+if git rev-parse --git-dir > /dev/null 2>&1; then
+  ALL_FILES=$(git diff --cached --name-only 2>/dev/null; git status --porcelain 2>/dev/null | awk '{print $2}')
+  for f in $ALL_FILES; do
+    case "$f" in
+      *.env*|*.key|*.pem|*.p12|*.secret|.tcbrc|.cloudbaserc*|.aws/*)
+        echo "❌ 敏感文件将提交: $f"
+        ERRORS=$((ERRORS+1))
+        ;;
+    esac
+  done
+fi
+
+echo ""
+if [ $ERRORS -gt 0 ]; then
+  echo "🚫 安全检查失败，$ERRORS 个问题，禁止推送。"
+  exit 1
+else
+  echo "✅ 安全检查通过，可以推送。"
+  exit 0
+fi
